@@ -2,7 +2,15 @@
 
 A container-first application designed for querying Azure Log Analytics workspaces, constructing KQL queries, and analyzing log telemetry with interactive GUI controls.
 
+![Application View](docs/app-view.png)
+
 ## Key Features & Functionality
+
+- **AI-Powered KQL Assistant (`Ask AI`)**:
+  - Click **Ask AI** in the top navigation bar to open the AI Assistant modal.
+  - Describe what logs you want to investigate in plain English (e.g., *"Find all HTTP 500 errors from Application Gateway in the last 24 hours"*).
+  - Integrates with Azure OpenAI (`gpt-4o`) to automatically generate optimized KQL queries with step-by-step technical explanations.
+  - Generates KQL code that automatically populates into the editor for instant 1-click execution.
 
 - **Interactive KQL Query Construction & Presets**:
   - Pre-built query templates for Application Gateway, Azure Firewall, Front Door, Storage Accounts, and Key Vault.
@@ -29,6 +37,26 @@ A container-first application designed for querying Azure Log Analytics workspac
 
 ---
 
+## AI-Powered KQL Generation (`Ask AI`)
+
+The application features an integrated AI Assistant powered by Azure OpenAI to help users construct complex KQL queries effortlessly:
+
+1. **Natural Language to KQL Translation**:
+   - Click the **Ask AI** button at the top right of the navigation bar.
+   - Enter natural language questions or prompt requests such as:
+     - *"Find all blocked traffic from Azure Firewall for client IP 10.0.0.45"*
+     - *"Summarize top 10 request URIs with high latency on Application Gateway"*
+     - *"List failed authentication attempts in Key Vault during the last 7 days"*
+
+2. **Automated KQL Editor Population**:
+   - The AI Assistant generates valid KQL queries formatted specifically for Azure Log Analytics schemas.
+   - The generated KQL query can be copied or loaded directly into the KQL Code Editor with a single click (`Apply Query`).
+
+3. **Backend Azure OpenAI Configuration**:
+   - Enabled by configuring `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o`) in `.env` or Kubernetes secret manifests.
+
+---
+
 ## Summarized Result Output & Breakdown
 
 The application includes a dedicated **Summarized Telemetry** panel located below the primary result table:
@@ -50,19 +78,18 @@ The application includes a dedicated **Summarized Telemetry** panel located belo
 
 ### Technologies Used
 - **Frontend**: React 19, TypeScript, Vite, Lucide Icons, `@azure/msal-react`, `@azure/msal-browser`.
-- **Backend**: Node.js 22, Express, TypeScript, Zod, `@azure/monitor-query-logs`, `@azure/identity`, Helmet, Express-Rate-Limit.
+- **Backend**: Node.js 22, Express, TypeScript, Zod, `@azure/monitor-query-logs`, `@azure/identity`, OpenAI SDK (`azure-openai`), Helmet, Express-Rate-Limit.
 - **Packaging & Monorepo**: Managed via npm workspaces (`client/` and `server/`).
 
 ### Frontend & Backend Communication
 - Communication between the client and server occurs via a secure REST API over HTTP/HTTPS using JSON payloads.
 - **Development Mode**: Vite dev server (`http://localhost:5173`) proxies `/api/*` requests to the Express backend (`http://localhost:8080`).
 - **Production Mode**: The Express server directly serves both `/api/*` endpoints and the compiled single-page static React build (`client/dist`).
-- **Security & Protection**: Backend endpoints are secured using Zod request body validation schemas, Helmet security headers, CORS origin restrictions, and sliding window rate limiting.
 
 ### Azure AD Authentication & Azure SDK Integration
 - **User Authentication**: Frontend integrates `@azure/msal-react` for Single Sign-On (SSO) using Microsoft Entra ID (Azure AD). Users sign in using OAuth 2.0 Authorization Code Flow with PKCE.
-- **Dynamic Workspace Discovery**: Upon login, the client uses the user's OAuth access token to query Azure Resource Graph (`microsoft.operationalinsights/workspaces`) and fetch all Log Analytics Workspaces the user has permissions to view.
-- **Log Analytics Query Execution**: Backend executes KQL queries using `@azure/monitor-query-logs`. Authentication to Azure Log Analytics occurs securely via `@azure/identity` using `DefaultAzureCredential`, Service Principal (`AZURE_CLIENT_SECRET`), or container Managed Identity. Azure client secrets remain strictly isolated on the backend server.
+- **Dynamic Workspace Discovery**: Client uses the user's OAuth access token to query Azure Resource Graph (`microsoft.operationalinsights/workspaces`) and fetch all Log Analytics Workspaces the user has permissions to view.
+- **Log Analytics Execution**: Backend queries Log Analytics using `@azure/monitor-query-logs` authenticated via `@azure/identity` using `DefaultAzureCredential`, Service Principal (`AZURE_CLIENT_SECRET`), or container Managed Identity.
 
 ---
 
@@ -72,7 +99,7 @@ Grant the application identity access to the Log Analytics workspace (e.g., `Log
 
 Configurable via environment variables or Kubernetes secrets:
 - Service Principal (SPN): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
-- User Access: MSAL Azure AD login with dynamic workspace discovery
+- Azure OpenAI Integration: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
 
 ---
 
