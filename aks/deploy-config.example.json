@@ -1,0 +1,12 @@
+{
+  "SubscriptionId": "00000000-0000-0000-0000-000000000000",
+  "ResourceGroup": "rg-loganalytics-prod",
+  "ClusterName": "aks-cluster-prod",
+  "AcrName": "myacrregistry",
+  "ImageName": "loganalytics-app",
+  "ImageTag": "latest",
+  "Namespace": "default",
+  "DeploymentManifest": "../aks/deployment.yaml",
+  "SecretManifest": "../aks/secret.yaml",
+  "IngressManifest": "../aks/istio-ingress.yaml"
+}

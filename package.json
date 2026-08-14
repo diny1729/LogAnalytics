@@ -1,0 +1,26 @@
+{
+  "name": "azure-log-analytics-kql-app",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "description": "Secure Node.js app for querying Azure Log Analytics and turning KQL filters into GUI controls.",
+  "scripts": {
+    "install:all": "npm install",
+    "check-health": "node scripts/check-health.mjs",
+    "dev": "concurrently \"npm run dev --workspace azure-kql-app-server\" \"npm run dev --workspace azure-kql-app-client\" \"npm run check-health\"",
+    "build": "npm run build --workspace azure-kql-app-server && npm run build --workspace azure-kql-app-client",
+    "test": "npm test --workspace azure-kql-app-server && npm test --workspace azure-kql-app-client",
+    "start": "npm run start --workspace azure-kql-app-server",
+    "start:prod": "npm run start:prod --workspace azure-kql-app-server",
+    "prod": "npm run build && npm run start:prod",
+    "production": "npm run build && npm run start:prod"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "marked": "^18.0.5",
+    "puppeteer-core": "^25.1.0"
+  }
+}

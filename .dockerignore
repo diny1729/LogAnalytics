@@ -1,0 +1,35 @@
+# Ignore node_modules
+node_modules
+client/node_modules
+server/node_modules
+
+# Ignore build output
+dist
+client/dist
+server/dist
+
+# Ignore version control and IDE folders
+.git
+.gitignore
+.vscode
+.gemini
+
+# Ignore workspace artifacts, brain, and temporary scratch folders
+brain
+scratch
+.system_generated
+
+# Ignore environment files, logs, and docs
+.env
+.env.*
+*.log
+*.pdf
+*.md
+
+# Ignore deployment scripts and Kubernetes manifests
+aks
+scripts
+deploy-local.ps1
+docker-compose.yml
+Dockerfile
+.dockerignore

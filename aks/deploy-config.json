@@ -1,0 +1,12 @@
+{
+  "SubscriptionId": "<your-subscription-id>",
+  "ResourceGroup": "<your-resource-group>",
+  "ClusterName": "<your-aks-cluster-name>",
+  "AcrName": "<your-acr-name>",
+  "ImageName": "loganalytics-app",
+  "ImageTag": "latest",
+  "Namespace": "default",
+  "DeploymentManifest": "../aks/deployment.yaml",
+  "SecretManifest": "../aks/secret.yaml",
+  "IngressManifest": "../aks/istio-ingress.yaml"
+}
