@@ -1,53 +1,98 @@
-# Azure Log Analytics KQL App
+# Azure Log Analytics KQL Explorer
 
-A container-first Node.js TypeScript application that runs KQL queries against Azure Log Analytics and turns common `where` filters into GUI controls. Azure credentials stay on the server; the browser only talks to the local API.
+A container-first application designed for querying Azure Log Analytics workspaces, constructing KQL queries, and analyzing log telemetry with interactive GUI controls.
 
-## Features
+## Key Features & Functionality
 
-- **Bluish-Green Dark Gradient Design System**: Premium dark UI theme (`#04141c` deep dark background, `#2dd4bf` teal accents, `#38bdf8` sky blue title highlights, and `#34d399` emerald success indicators).
-- **Summarized Column Telemetry & KQL Grouping**:
-  - Analytical breakdown table at the bottom of result tables displaying distinct value frequency counts (`Count`) and percentage share (`% Share`) with visual progress bars.
-  - **KQL Group By Engine (`| summarize count() by ...`)**: Multi-selecting 2 or 3+ columns in the telemetry filter dropdown dynamically groups output rows by composite tuples (e.g. `| summarize count() by requestUri_s, clientIP_s`), displaying exact combination counts for each distinct URI per Client IP.
-  - **Multi-Select Cascading Dropdown (`Filter Columns & Values`)**: 2-level popover menu for selecting multiple columns and checking specific sub-values per column. Positioned left-aligned next to the title for zero screen overflow.
-  - **Interactive Column Header Sorting**: Clickable table headers (`Column Name`, `Distinct Output Value`, `Count`, `% Share`, and dynamic grouped column headers) with visual sort indicators (`ArrowUp` / `ArrowDown`).
-  - **Dynamic View Scope Toggle**: Seamlessly switch between **`Filtered (X)`** (summarizes frequencies across active primary table filter results) and **`All Rows (Y)`** (summarizes over the total dataset).
-  - **Wrapped Column Values & Fixed Layout**: Zero horizontal scrolling (`table-layout: fixed; width: 100%`) with automatic word wrapping for long URLs and strings.
+- **Interactive KQL Query Construction & Presets**:
+  - Pre-built query templates for Application Gateway, Azure Firewall, Front Door, Storage Accounts, and Key Vault.
+  - GUI condition controls with real-time `⚡ KQL Preview` bar.
+  - Support for multiple filter operators: `==`, `!=`, `contains`, `!contains`, and `between` (e.g., `between (400 .. 599)`).
+  - Dynamic resource selection with dependent child dropdowns (e.g., selecting a Resource updates available DNS hosts or container names).
+
 - **Multi-Operator Primary Result Filtering**:
-  - Filter primary result table rows using interactive operators (`==`, `!=`, `contains`, `!contains`).
-  - **Active Multi-Column Filters Bar**: Visual filter condition pills displaying active filters with individual `✕` removal buttons and a **Clear All Filters** action.
-- **Interactive KQL Preset & Condition Filters**:
-  - Quick-switch preset cards for Application Gateway, Azure Firewall, Front Door, Storage, and Key Vault.
-  - Filter condition controls with operator selection (`==`, `!=`, `contains`, `!contains`, `between`), custom value input boxes, popover selection menus, and real-time `⚡ KQL Preview` bar.
-- **Direct Click-Hold Column Movement**: Reorder output table columns smoothly by clicking, holding, and dragging headers (`cursor: grab` / `cursor: grabbing`).
-- **Secure Azure Authentication**: Server-side credentials with `DefaultAzureCredential` / Service Principal (SPN) and frontend MSAL Azure AD login with dynamic Azure Resource Graph workspace discovery.
-- **Enterprise Result Tables**: Page size selector (`50`, `100`, `200`, `500`, `1000`), resizable columns, type-aware sorting (numeric, ISO timestamp, string), pagination, CSV download, and local/UTC timezone toggling.
+  - Filter output table rows directly using column-level operators (`==`, `!=`, `contains`, `!contains`).
+  - Visual active filter pills with individual removal buttons and a **Clear All Filters** action.
 
-## Azure Access
+- **Summarized Result Output & KQL Group By Breakdown**:
+  - Analytical summary table displaying distinct value frequency counts (`Count`) and percentage share (`% Share`) with progress indicators.
+  - **KQL Multi-Column Grouping (`| summarize count() by ...`)**: Select multiple columns (e.g., `requestUri_s` and `clientIP_s`) to execute AND tuple grouping, displaying exact combination counts for each URI per Client IP.
+  - **Cascading Filter Dropdown**: 2-level menu allowing multi-column checking and specific sub-value selection per column.
+  - **Interactive Column Header Sorting**: Click any header (`Column Name`, `Distinct Output Value`, `Count`, `% Share`, or dynamic column headers) to sort rows in Ascending (`↑`) or Descending (`↓`) order.
+  - **Dynamic View Scope Toggle**: Switch between summarizing over active primary filtered results (`Filtered`) or the total dataset (`All Rows`).
 
-Grant the application identity least-privilege access to the Log Analytics workspace, typically the `Log Analytics Reader` role at workspace scope.
+- **Easy Access & Result Table Tools**:
+  - Direct click-hold drag header reordering to customize column sequence.
+  - Page size customization (`50`, `100`, `200`, `500`, `1000` rows per page).
+  - Dynamic pagination, type-aware column sorting (numeric, ISO timestamp, string), CSV export, and Local/UTC timezone toggles.
+  - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
 
-For Managed Identity in Azure-hosted containers, assign the identity to the runtime and set `LOG_ANALYTICS_WORKSPACE_ID`. For a user-assigned identity, also set `AZURE_CLIENT_ID`.
+---
 
-For SPN auth, set either:
+## Summarized Result Output & Breakdown
 
-- `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
-- `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SERVICE_PRINCIPAL_CERTIFICATE_PATH`
+The application includes a dedicated **Summarized Telemetry** panel located below the primary result table:
 
-## Local Development
+1. **Multi-Column KQL Grouping**:
+   - Selecting 1 column displays frequency breakdown for that field.
+   - Selecting 2 or more columns performs multi-column tuple grouping (`| summarize count() by col1, col2`), rendering separate columns for each field and computing exact occurrence counts.
+
+2. **Sub-Value Filtering & View Scope**:
+   - Check specific sub-values per column to refine summary telemetry.
+   - Toggle between **Filtered** (evaluates active primary table filters) and **All Rows** (evaluates raw query output).
+
+3. **Column Header Sorting**:
+   - Click any table header to toggle Ascending (`↑`) or Descending (`↓`) sort order.
+
+---
+
+## Application Architecture & Technical Design
+
+### Technologies Used
+- **Frontend**: React 19, TypeScript, Vite, Lucide Icons, `@azure/msal-react`, `@azure/msal-browser`.
+- **Backend**: Node.js 22, Express, TypeScript, Zod, `@azure/monitor-query-logs`, `@azure/identity`, Helmet, Express-Rate-Limit.
+- **Packaging & Monorepo**: Managed via npm workspaces (`client/` and `server/`).
+
+### Frontend & Backend Communication
+- Communication between the client and server occurs via a secure REST API over HTTP/HTTPS using JSON payloads.
+- **Development Mode**: Vite dev server (`http://localhost:5173`) proxies `/api/*` requests to the Express backend (`http://localhost:8080`).
+- **Production Mode**: The Express server directly serves both `/api/*` endpoints and the compiled single-page static React build (`client/dist`).
+- **Security & Protection**: Backend endpoints are secured using Zod request body validation schemas, Helmet security headers, CORS origin restrictions, and sliding window rate limiting.
+
+### Azure AD Authentication & Azure SDK Integration
+- **User Authentication**: Frontend integrates `@azure/msal-react` for Single Sign-On (SSO) using Microsoft Entra ID (Azure AD). Users sign in using OAuth 2.0 Authorization Code Flow with PKCE.
+- **Dynamic Workspace Discovery**: Upon login, the client uses the user's OAuth access token to query Azure Resource Graph (`microsoft.operationalinsights/workspaces`) and fetch all Log Analytics Workspaces the user has permissions to view.
+- **Log Analytics Query Execution**: Backend executes KQL queries using `@azure/monitor-query-logs`. Authentication to Azure Log Analytics occurs securely via `@azure/identity` using `DefaultAzureCredential`, Service Principal (`AZURE_CLIENT_SECRET`), or container Managed Identity. Azure client secrets remain strictly isolated on the backend server.
+
+---
+
+## Azure Access & Configuration
+
+Grant the application identity access to the Log Analytics workspace (e.g., `Log Analytics Reader` role).
+
+Configurable via environment variables or Kubernetes secrets:
+- Service Principal (SPN): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+- User Access: MSAL Azure AD login with dynamic workspace discovery
+
+---
+
+## Local Development & Execution
 
 ```powershell
 npm run install:all
 npm run dev
 ```
 
-The frontend runs on `http://localhost:5173` and proxies API calls to the server on `http://localhost:8080`.
+To run a production build locally:
+```powershell
+npm run production
+```
+
+---
 
 ## Container & AKS Production Deployment
 
-### 1. Dockerfile & Context Optimization
-The application uses a lightweight multi-stage Docker build (`node:22-alpine`) that omits dev dependencies, source caches, `.git`, `scratch`, `brain`, and temporary files via `.dockerignore`.
-
-### 2. Configure Cluster Credentials
+### 1. Configure Cluster Credentials
 Copy `aks/deploy-config.example.json` to `aks/deploy-config.json` and configure your Azure Subscription, Resource Group, Cluster Name, and ACR Registry:
 ```json
 {
@@ -60,24 +105,9 @@ Copy `aks/deploy-config.example.json` to `aks/deploy-config.json` and configure 
 }
 ```
 
-### 3. Master All-in-One Production Deployment Script
-Run the master PowerShell deployment script from the project root:
+### 2. Master All-in-One Production Deployment Script
+Run the master deployment script from the project root:
 ```powershell
 .\scripts\deploy-prod.ps1
 ```
-What this master script automatically performs:
-1. **Reads Cluster Configuration**: Parses `aks/deploy-config.json`.
-2. **Docker Build**: Builds local production image using multi-stage `Dockerfile`.
-3. **ACR Push**: Authenticates (`az acr login`) and pushes the image to Azure Container Registry.
-4. **Interactive User Confirmation**: Prompts `Do you want to proceed with deploying to AKS cluster '...'? (Y/N)` before modifying the AKS cluster.
-5. **AKS Authentication & Deployment**: Connects (`az aks get-credentials`) and applies secrets (`aks/secret.yaml`), deployments (`aks/deployment.yaml`), and Istio ingress (`aks/istio-ingress.yaml`).
-
----
-
-## API
-
-- `GET /api/health`
-- `POST /api/parse` with `{ "query": "..." }`
-- `POST /api/query` with `{ "query": "...", "timespan": "PT24H", "filters": [{ "id": "...", "enabled": true }] }`
-
-`workspaceId` can be included in `/api/query` only when `ALLOW_WORKSPACE_OVERRIDE=true`.
+The script builds the Docker image, pushes it to ACR, prompts for user confirmation (`Y/N`), connects to AKS, and applies Kubernetes manifests (`aks/secret.yaml`, `aks/deployment.yaml`, `aks/istio-ingress.yaml`).
