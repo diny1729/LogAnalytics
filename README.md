@@ -12,15 +12,41 @@ A container-first application designed for querying Azure Log Analytics workspac
   - Integrates with Azure OpenAI (`gpt-4o`) to automatically generate optimized KQL queries with step-by-step technical explanations.
   - Generates KQL code that automatically populates into the editor for instant 1-click execution.
 
-- **Interactive KQL Query Construction & Presets**:
-  - Pre-built query templates for Application Gateway, Azure Firewall, Front Door, Storage Accounts, and Key Vault.
-  - GUI condition controls with real-time `⚡ KQL Preview` bar.
-  - Support for multiple filter operators: `==`, `!=`, `contains`, `!contains`, and `between` (e.g., `between (400 .. 599)`).
-  - Dynamic resource selection with dependent child dropdowns (e.g., selecting a Resource updates available DNS hosts or container names).
+- **Query Row Limit Selector (`Max Rows`)**:
+  - Select query maximum row limits (`100`, `500`, `1000`, `2500`, `5000`, `10000`, `50000` rows) directly from the query toolbar before running queries.
+  - Default value set to `1000` rows to optimize performance and backend memory usage while preventing browser DOM overload.
 
-- **Multi-Operator Primary Result Filtering**:
-  - Filter output table rows directly using column-level operators (`==`, `!=`, `contains`, `!contains`).
-  - Visual active filter pills with individual removal buttons and a **Clear All Filters** action.
+- **Alphabetically Sorted Log Presets Library**:
+  - Interactive **⚡ Log Presets** dropdown menu and **Quick Switch** chips, automatically sorted in strict alphabetical order by name:
+    - **AFD Access Log** (`AzureDiagnostics` FrontDoorAccessLog)
+    - **AFD Firewall Log** (`AzureDiagnostics` FrontDoorWebApplicationFirewallLog)
+    - **App Gateway Log** (`AzureDiagnostics` ApplicationGatewayAccessLog)
+    - **App Service HTTP Logs** (`AppServiceHTTPLogs`)
+    - **Automation Job Logs** (`AzureDiagnostics` MICROSOFT.AUTOMATION JobLogs)
+    - **Azure Firewall Application Log** (`AzureDiagnostics` AZFWApplicationRule)
+    - **Azure Firewall Network Log** (`AzureDiagnostics` NetworkRule)
+    - **Email Delivery Status** (`ACSEmailStatusUpdateOperational`)
+    - **Key Vault Audit Log** (`AzureDiagnostics` MICROSOFT.KEYVAULT AuditEvent)
+    - **Kube Events** (`KubeEvents`)
+    - **Log Usage by DataType** (`Usage` billable volume summary by DataType per day)
+    - **Network Security Group Logs** (`AzureDiagnostics` NetworkSecurity with `ResourceGroup` & `Resource` dynamic filters)
+    - **SMS Incoming Operations** (`ACSSMSIncomingOperations` with `OperationName` & `PhoneNumber` dynamic filters)
+    - **Storage Blob Log** (`StorageBlobLogs`)
+    - **Storage Fileshare Log** (`StorageFileLogs`)
+    - **WVD Connections** (`WVDConnections` Azure Virtual Desktop telemetry)
+
+- **Interactive Dynamic Filters & KQL Preview**:
+  - Dynamic filter dropdowns populated via live distinct value queries from Azure Log Analytics.
+  - Smart query stripping engine (`fetchDynamicFilters`) that strips post-aggregation operations (`summarize`, `order by`, `project`, `render`) when fetching distinct filter values to ensure 100% dropdown population.
+  - GUI condition controls with real-time `⚡ KQL Preview` bar.
+  - Multiple condition operators supported: `==`, `!=`, `contains`, `!contains`, and `between` (e.g., `between (400 .. 599)`).
+
+- **Isolated Table Body Scrollbar & Column Tools**:
+  - Vertical scrollbar is strictly contained within the table body scroll area (`.table-body-wrap`) below column headers, preventing scrollbar overlap on Column Names.
+  - Direct click-hold drag header reordering to customize column sequence.
+  - Synchronized horizontal scrollbar across header and body tables.
+  - Multi-operator primary result filtering (`==`, `!=`, `contains`, `!contains`) with visual active filter pills.
+  - Page size customization (`50`, `100`, `200`, `500`, `1000` rows per page), dynamic pagination, type-aware sorting (numeric, ISO timestamp, string), CSV export, and Local/UTC timezone toggles.
 
 - **Summarized Result Output & KQL Group By Breakdown**:
   - Analytical summary table displaying distinct value frequency counts (`Count`) and percentage share (`% Share`) with progress indicators.
@@ -29,10 +55,7 @@ A container-first application designed for querying Azure Log Analytics workspac
   - **Interactive Column Header Sorting**: Click any header (`Column Name`, `Distinct Output Value`, `Count`, `% Share`, or dynamic column headers) to sort rows in Ascending (`↑`) or Descending (`↓`) order.
   - **Dynamic View Scope Toggle**: Switch between summarizing over active primary filtered results (`Filtered`) or the total dataset (`All Rows`).
 
-- **Easy Access & Result Table Tools**:
-  - Direct click-hold drag header reordering to customize column sequence.
-  - Page size customization (`50`, `100`, `200`, `500`, `1000` rows per page).
-  - Dynamic pagination, type-aware column sorting (numeric, ISO timestamp, string), CSV export, and Local/UTC timezone toggles.
+- **Secure Azure AD Auth & Workspace Discovery**:
   - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
 
 ---
