@@ -77,6 +77,7 @@ export async function runQuery(args: {
   timespan: string;
   workspaceId?: string;
   filters: Array<{ id: string; enabled: boolean }>;
+  maxRows?: number;
   token?: string;
 }): Promise<QueryResponse> {
   const headers: Record<string, string> = {};
@@ -91,7 +92,8 @@ export async function runQuery(args: {
       query: args.query,
       timespan: args.timespan,
       workspaceId: args.workspaceId,
-      filters: args.filters
+      filters: args.filters,
+      maxRows: args.maxRows
     })
   });
 }

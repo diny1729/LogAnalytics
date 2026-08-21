@@ -20,7 +20,8 @@ const queryBodySchema = z.object({
   workspaceId: z.string().min(1).max(256).optional(),
   query: z.string().min(1).max(config.QUERY_MAX_LENGTH),
   timespan: z.string().min(2).max(64).default("PT24H"),
-  filters: z.array(filterSelectionSchema).default([])
+  filters: z.array(filterSelectionSchema).default([]),
+  maxRows: z.coerce.number().int().positive().max(50000).default(1000)
 });
 
 router.get("/health", (_request, response) => {
@@ -65,6 +66,7 @@ router.post("/query", async (request, response, next) => {
       workspaceId,
       query,
       timespan: body.timespan,
+      maxRows: body.maxRows,
       userToken: token
     });
 

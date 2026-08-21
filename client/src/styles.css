@@ -48,16 +48,33 @@ body {
   box-sizing: border-box;
 }
 
-.table-wrap {
+.table-container-outer {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  max-height: calc(100vh - 240px);
-  overflow: auto; /* Isolated vertical and horizontal scrolling inside container */
   border: 1px solid rgba(45, 212, 191, 0.22);
   border-radius: 8px;
   background: rgba(6, 32, 44, 0.75);
   position: relative;
+  overflow: hidden;
+}
+
+.table-header-wrap {
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  background-color: #062330;
+  border-bottom: 2px solid rgba(45, 212, 191, 0.4);
+}
+
+.table-wrap,
+.table-body-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  max-height: calc(100vh - 280px);
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 /* Custom Scrollbar for sleek UI - Blue Shade */

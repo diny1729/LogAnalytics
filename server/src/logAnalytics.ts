@@ -26,6 +26,7 @@ export async function queryWorkspaceLogs(args: {
   workspaceId: string;
   query: string;
   timespan: string;
+  maxRows?: number;
   userToken?: string;
 }): Promise<QueryResponse> {
   let queryClient = client;
@@ -40,6 +41,11 @@ export async function queryWorkspaceLogs(args: {
     queryClient = new LogsQueryClient(userCredential);
   }
 
+  const effectiveMaxRows = Math.min(
+    args.maxRows && args.maxRows > 0 ? args.maxRows : 1000,
+    config.QUERY_MAX_ROWS
+  );
+
   try {
     const result = await queryClient.queryWorkspace(args.workspaceId, args.query, {
       duration: args.timespan
@@ -48,9 +54,11 @@ export async function queryWorkspaceLogs(args: {
       includeQueryStatistics: true
     });
 
+    const mapTable = (table: LogsTable) => toQueryTable(table, effectiveMaxRows);
+
     const tables = result.status === LogsQueryResultStatus.PartialFailure
-      ? result.partialTables.map(toQueryTable)
-      : result.tables.map(toQueryTable);
+      ? result.partialTables.map(mapTable)
+      : result.tables.map(mapTable);
 
     return {
       tables,
@@ -70,13 +78,13 @@ export async function queryWorkspaceLogs(args: {
   }
 }
 
-function toQueryTable(table: LogsTable): QueryTable {
+function toQueryTable(table: LogsTable, maxRows: number = 1000): QueryTable {
   return {
     name: table.name,
     columns: table.columnDescriptors.map((column) => ({
       name: column.name,
       type: column.type
     })),
-    rows: table.rows.slice(0, config.QUERY_MAX_ROWS)
+    rows: table.rows.slice(0, maxRows)
   };
 }

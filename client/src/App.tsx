@@ -225,6 +225,216 @@ const PRESETS: PresetQuery[] = [
       { label: "Storage Account Name", field: "AccountName", clauseTemplate: (val: string) => `| where AccountName == "${val}"` },
       { label: "Container Name", field: "ContainerName", clauseTemplate: (val: string) => `| where ContainerName == "${val}"` }
     ]
+  },
+  {
+    id: "kube-events",
+    name: "Kube Events",
+    baseQuery: 'KubeEvents\n| order by TimeGenerated desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "KubeEventType", clause: '| where KubeEventType == ""' },
+      { label: "ObjectKind", clause: '| where ObjectKind == ""' },
+      { label: "Reason", clause: '| where Reason contains ""' },
+      { label: "Namespace", clause: '| where Namespace == ""' },
+      { label: "Name", clause: '| where Name contains ""' },
+      { label: "Message", clause: '| where Message contains ""' }
+    ],
+    projectColumns: ["TimeGenerated", "Name", "ObjectKind", "KubeEventType", "Reason", "Message", "Namespace"],
+    dynamicFilters: [
+      { label: "Namespace", field: "Namespace", clauseTemplate: (val: string) => `| where Namespace == "${val}"` },
+      { label: "Object Kind", field: "ObjectKind", clauseTemplate: (val: string) => `| where ObjectKind == "${val}"` }
+    ]
+  },
+  {
+    id: "email-delivery-status",
+    name: "Email Delivery Status",
+    baseQuery: 'ACSEmailStatusUpdateOperational\n| order by TimeGenerated desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "DeliveryStatus", clause: '| where DeliveryStatus == ""' },
+      { label: "OperationName", clause: '| where OperationName == ""' },
+      { label: "SenderUsername", clause: '| where SenderUsername contains ""' },
+      { label: "RecipientId", clause: '| where RecipientId contains ""' }
+    ],
+    projectColumns: ["TimeGenerated", "OperationName", "SenderUsername", "DeliveryStatus", "RecipientId"],
+    dynamicFilters: [
+      { label: "Delivery Status", field: "DeliveryStatus", clauseTemplate: (val: string) => `| where DeliveryStatus == "${val}"` },
+      { label: "Sender Username", field: "SenderUsername", clauseTemplate: (val: string) => `| where SenderUsername == "${val}"` }
+    ]
+  },
+  {
+    id: "keyvault-audit-log",
+    name: "Key Vault Audit Log",
+    baseQuery: 'AzureDiagnostics\n| where Category == "AuditEvent"\n| where ResourceProvider == "MICROSOFT.KEYVAULT"',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "OperationName", clause: '| where OperationName == ""' },
+      { label: "ResultType", clause: '| where ResultType == "Success"' },
+      { label: "identity_claim_upn_s", clause: '| where identity_claim_upn_s contains ""' },
+      { label: "id_s", clause: '| where id_s contains ""' },
+      { label: "Resource", clause: '| where Resource == ""' }
+    ],
+    projectColumns: ["TimeGenerated", "id_s", "Category", "OperationName", "Resource", "identity_claim_upn_s", "ResultType"],
+    dynamicFilters: [
+      { label: "Key Vault Resource", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
+      { label: "Operation Name", field: "OperationName", clauseTemplate: (val: string) => `| where OperationName == "${val}"` }
+    ]
+  },
+  {
+    id: "appservice-http-logs",
+    name: "App Service HTTP Logs",
+    baseQuery: 'AppServiceHTTPLogs\n| order by TimeGenerated desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "CsMethod", clause: '| where CsMethod == "GET"' },
+      { label: "ScStatus", clause: '| where ScStatus between (400 .. 599)' },
+      { label: "CsHost", clause: '| where CsHost contains ""' },
+      { label: "CsUriStem", clause: '| where CsUriStem contains ""' },
+      { label: "CIp", clause: '| where CIp == ""' },
+      { label: "SPort", clause: '| where SPort == 443' },
+      { label: "TimeTaken", clause: '| where TimeTaken > 1000' },
+      { label: "Result", clause: '| where Result == ""' },
+      { label: "Referer", clause: '| where Referer contains ""' }
+    ],
+    projectColumns: ["TimeGenerated", "CsMethod", "CsUriStem", "SPort", "CIp", "CsHost", "ScStatus", "TimeTaken", "Result", "Referer"],
+    dynamicFilters: [
+      { label: "Host (CsHost)", field: "CsHost", clauseTemplate: (val: string) => `| where CsHost == "${val}"` },
+      { label: "HTTP Method (CsMethod)", field: "CsMethod", clauseTemplate: (val: string) => `| where CsMethod == "${val}"` }
+    ]
+  },
+  {
+    id: "automation-job-logs",
+    name: "Automation Job Logs",
+    baseQuery: 'AzureDiagnostics\n| where ResourceProvider == "MICROSOFT.AUTOMATION"\n| where Category == "JobLogs"',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "Resource", clause: '| where Resource == ""' },
+      { label: "RunbookName_s", clause: '| where RunbookName_s contains ""' },
+      { label: "ResultType", clause: '| where ResultType == "Completed"' },
+      { label: "ResultDescription", clause: '| where ResultDescription contains ""' }
+    ],
+    projectColumns: ["TimeGenerated", "Resource", "ResultType", "ResultDescription", "RunbookName_s"],
+    dynamicFilters: [
+      { label: "Automation Account Resource", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
+      { label: "Runbook Name (RunbookName_s)", field: "RunbookName_s", clauseTemplate: (val: string) => `| where RunbookName_s == "${val}"` }
+    ]
+  },
+  {
+    id: "wvd-connections",
+    name: "WVD Connections",
+    baseQuery: 'WVDConnections\n| order by TimeGenerated desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "UserName", clause: '| where UserName contains ""' },
+      { label: "State", clause: '| where State == "Connected"' },
+      { label: "ClientOS", clause: '| where ClientOS == ""' },
+      { label: "ClientSideIPAddress", clause: '| where ClientSideIPAddress == ""' },
+      { label: "ConnectionType", clause: '| where ConnectionType == ""' },
+      { label: "ResourceAlias", clause: '| where ResourceAlias contains ""' },
+      { label: "SessionHostName", clause: '| where SessionHostName contains ""' },
+      { label: "SessionHostPoolType", clause: '| where SessionHostPoolType == ""' },
+      { label: "SessionHostIPAddress", clause: '| where SessionHostIPAddress == ""' },
+      { label: "GatewayRegion", clause: '| where GatewayRegion == ""' }
+    ],
+    projectColumns: [
+      "TimeGenerated",
+      "UserName",
+      "State",
+      "ClientOS",
+      "ClientSideIPAddress",
+      "ConnectionType",
+      "ResourceAlias",
+      "SessionHostName",
+      "SessionHostPoolType",
+      "SessionHostIPAddress",
+      "GatewayRegion"
+    ],
+    dynamicFilters: [
+      { label: "User Name (UserName)", field: "UserName", clauseTemplate: (val: string) => `| where UserName == "${val}"` },
+      { label: "State", field: "State", clauseTemplate: (val: string) => `| where State == "${val}"` }
+    ]
+  },
+  {
+    id: "datatype-log-usage",
+    name: "Log Usage by DataType",
+    baseQuery: 'Usage\n| where IsBillable == true\n| summarize VolumeGB = sum(Quantity) / 1000 by DataType, bin(TimeGenerated, 1d)\n| order by TimeGenerated desc, VolumeGB desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(7d)' },
+      { label: "DataType", clause: '| where DataType contains ""' }
+    ],
+    projectColumns: ["TimeGenerated", "DataType", "VolumeGB"],
+    dynamicFilters: [
+      { label: "Data Type", field: "DataType", clauseTemplate: (val: string) => `| where DataType == "${val}"` }
+    ]
+  },
+  {
+    id: "nsg-logs",
+    name: "Network Security Group Logs",
+    baseQuery: 'AzureDiagnostics\n| where Category contains "NetworkSecurity"',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "Resource", clause: '| where Resource == ""' },
+      { label: "ResourceGroup", clause: '| where ResourceGroup == ""' },
+      { label: "ruleName_s", clause: '| where ruleName_s contains ""' },
+      { label: "direction_s", clause: '| where direction_s == "Inbound"' },
+      { label: "priority_d", clause: '| where priority_d == 100' },
+      { label: "type_s", clause: '| where type_s == ""' },
+      { label: "primaryIPv4Address_s", clause: '| where primaryIPv4Address_s == ""' },
+      { label: "conditions_destinationPortRange_s", clause: '| where conditions_destinationPortRange_s contains ""' },
+      { label: "conditions_destinationIP_s", clause: '| where conditions_destinationIP_s contains ""' }
+    ],
+    projectColumns: [
+      "TimeGenerated",
+      "type_s",
+      "Resource",
+      "ResourceGroup",
+      "ruleName_s",
+      "priority_d",
+      "direction_s",
+      "primaryIPv4Address_s",
+      "conditions_destinationPortRange_s",
+      "conditions_destinationIP_s"
+    ],
+    dynamicFilters: [
+      { label: "Resource Group Name", field: "ResourceGroup", clauseTemplate: (val: string) => `| where ResourceGroup == "${val}"` },
+      { label: "NSG Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` }
+    ]
+  },
+  {
+    id: "sms-incoming-operations",
+    name: "SMS Incoming Operations",
+    baseQuery: 'ACSSMSIncomingOperations\n| order by TimeGenerated desc',
+    options: [
+      { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "OperationName", clause: '| where OperationName == ""' },
+      { label: "PhoneNumber", clause: '| where PhoneNumber contains ""' },
+      { label: "ResultType", clause: '| where ResultType == ""' },
+      { label: "CallerIpAddress", clause: '| where CallerIpAddress == ""' },
+      { label: "Country", clause: '| where Country == ""' },
+      { label: "CorrelationId", clause: '| where CorrelationId == ""' },
+      { label: "SdkType", clause: '| where SdkType == ""' },
+      { label: "PlatformType", clause: '| where PlatformType == ""' },
+      { label: "Method", clause: '| where Method == ""' }
+    ],
+    projectColumns: [
+      "TimeGenerated",
+      "OperationName",
+      "CorrelationId",
+      "ResultType",
+      "ResultSignature",
+      "ResultDescription",
+      "CallerIpAddress",
+      "URI",
+      "PhoneNumber",
+      "SdkType",
+      "PlatformType",
+      "Method",
+      "Country"
+    ],
+    dynamicFilters: [
+      { label: "Operation Name", field: "OperationName", clauseTemplate: (val: string) => `| where OperationName == "${val}"` },
+      { label: "Phone Number", field: "PhoneNumber", clauseTemplate: (val: string) => `| where PhoneNumber == "${val}"` }
+    ]
   }
 ];
 
@@ -235,7 +445,16 @@ const presetColors: Record<string, { bg: string, text: string }> = {
   "azfw-application": { bg: "#D83B01", text: "#FFFFFF" },
   "app-gateway": { bg: "#7A2EAB", text: "#FFFFFF" },
   "storage-file": { bg: "#008272", text: "#FFFFFF" },
-  "storage-blob": { bg: "#005a9e", text: "#FFFFFF" }
+  "storage-blob": { bg: "#005a9e", text: "#FFFFFF" },
+  "kube-events": { bg: "#326ce5", text: "#FFFFFF" },
+  "email-delivery-status": { bg: "#c678dd", text: "#FFFFFF" },
+  "keyvault-audit-log": { bg: "#ff8c00", text: "#FFFFFF" },
+  "appservice-http-logs": { bg: "#00bcf2", text: "#000000" },
+  "automation-job-logs": { bg: "#008080", text: "#FFFFFF" },
+  "wvd-connections": { bg: "#5c2d91", text: "#FFFFFF" },
+  "datatype-log-usage": { bg: "#e5c07b", text: "#000000" },
+  "nsg-logs": { bg: "#00b0f0", text: "#000000" },
+  "sms-incoming-operations": { bg: "#84cc16", text: "#000000" }
 };
 
 const timespans = [
@@ -312,6 +531,11 @@ function combineWorkspaces(fetched: AzureWorkspace[]): AzureWorkspace[] {
 export function App() {
   const [query, setQuery] = useState(starterQuery);
   const [timespan, setTimespan] = useState("PT24H");
+  const [maxRows, setMaxRows] = useState<number>(1000);
+
+  const sortedPresets = useMemo(() => {
+    return [...PRESETS].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, []);
   const [workspaceId, setWorkspaceId] = useState(() => {
     const initial = getPredefinedWorkspaces();
     return initial.length > 0 ? initial[0].customerId : "";
@@ -669,10 +893,15 @@ export function App() {
       }
     }
 
+    // Clean base query by removing post-aggregation operations (summarize, order, project, render)
+    const cleanBase = preset.baseQuery
+      .split(/\n\|\s*(summarize|order|project|render)\b/i)[0]
+      .trim();
+
     for (let i = 0; i < preset.dynamicFilters.length; i++) {
       const filter = preset.dynamicFilters[i];
       try {
-        let q = `${preset.baseQuery}\n| where TimeGenerated > ago(24h)`;
+        let q = `${cleanBase}\n| where TimeGenerated > ago(24h)`;
 
         // Append clauses for any preceding filters that have a selection (e.g. Resource / AccountName filter first)
         for (let j = 0; j < i; j++) {
@@ -685,13 +914,35 @@ export function App() {
 
         q += `\n| distinct ${filter.field}`;
 
-        const res = await runQuery({
-          query: q,
-          timespan: "PT24H",
-          workspaceId: targetWs,
-          filters: [],
-          token
-        });
+        let res;
+        try {
+          res = await runQuery({
+            query: q,
+            timespan: "PT24H",
+            workspaceId: targetWs,
+            filters: [],
+            token
+          });
+        } catch {
+          // Fallback without TimeGenerated clause in case the table does not contain a TimeGenerated column
+          let fallbackQ = `${cleanBase}`;
+          for (let j = 0; j < i; j++) {
+            const prevFilter = preset.dynamicFilters[j];
+            const selectedVal = currentSelectedFilters[prevFilter.field];
+            if (selectedVal) {
+              fallbackQ += `\n${prevFilter.clauseTemplate(selectedVal)}`;
+            }
+          }
+          fallbackQ += `\n| distinct ${filter.field}`;
+
+          res = await runQuery({
+            query: fallbackQ,
+            timespan: "PT24H",
+            workspaceId: targetWs,
+            filters: [],
+            token
+          });
+        }
 
         const rawValues = res.tables[0]?.rows.map(r => r[0] as string).filter(Boolean) || [];
         const values = rawValues.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
@@ -778,6 +1029,7 @@ export function App() {
         timespan: finalTimespan,
         workspaceId: workspaceId.trim() || undefined,
         filters: [],
+        maxRows,
         token
       });
       setResult(response);
@@ -873,7 +1125,7 @@ export function App() {
                 )}
               </button>
             </div>
-            <div className="toolbar">
+            <div className="toolbar" style={{ display: "flex", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <SegmentedControl
                   value={timespan}
@@ -895,6 +1147,31 @@ export function App() {
                     />
                   </div>
                 )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(10, 44, 58, 0.9)", padding: "4px 10px", borderRadius: "8px", border: "1px solid rgba(45, 212, 191, 0.28)", height: "36px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8", whiteSpace: "nowrap" }}>Max Rows:</span>
+                <select
+                  value={maxRows}
+                  onChange={(e) => setMaxRows(Number(e.target.value))}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#34d399",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                  aria-label="Max rows"
+                >
+                  <option value={100} style={{ background: "#06202c", color: "#f8fafc" }}>100 rows</option>
+                  <option value={500} style={{ background: "#06202c", color: "#f8fafc" }}>500 rows</option>
+                  <option value={1000} style={{ background: "#06202c", color: "#f8fafc" }}>1,000 rows (Default)</option>
+                  <option value={2500} style={{ background: "#06202c", color: "#f8fafc" }}>2,500 rows</option>
+                  <option value={5000} style={{ background: "#06202c", color: "#f8fafc" }}>5,000 rows</option>
+                  <option value={10000} style={{ background: "#06202c", color: "#f8fafc" }}>10,000 rows</option>
+                  <option value={50000} style={{ background: "#06202c", color: "#f8fafc" }}>50,000 rows</option>
+                </select>
               </div>
               <button className="primary-button" onClick={handleRun} disabled={loading} style={{ alignSelf: "flex-start" }}>
                 <Play size={17} />
@@ -978,7 +1255,7 @@ export function App() {
               <div className="dynamic-filter-header">
                 <span className="dynamic-filter-label" style={{ color: "#38bdf8" }}>⚡ Log Presets</span>
                 <span className="filter-count">
-                  {PRESETS.length} presets
+                  {sortedPresets.length} presets
                 </span>
               </div>
               <div className="dynamic-filter-inputs">
@@ -990,8 +1267,8 @@ export function App() {
                   }}
                   className="dynamic-filter-select"
                 >
-                  <option value="">-- Select a Log Preset ({PRESETS.length}) --</option>
-                  {PRESETS.map((preset) => (
+                  <option value="">-- Select a Log Preset ({sortedPresets.length}) --</option>
+                  {sortedPresets.map((preset) => (
                     <option key={preset.id} value={preset.id}>
                       {preset.name}
                     </option>
@@ -1003,7 +1280,7 @@ export function App() {
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", marginBottom: "16px" }}>
             <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#38bdf8" }}>Quick Switch:</span>
-            {PRESETS.map((preset) => {
+            {sortedPresets.map((preset) => {
               const isActive = activePreset?.id === preset.id;
               const colors = presetColors[preset.id] || { bg: "#ccc", text: "#000" };
               return (
@@ -1560,17 +1837,30 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
   }
 
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const topScrollRef = useRef<HTMLDivElement | null>(null);
 
   function syncTableScroll() {
-    if (topScrollRef.current && tableScrollRef.current) {
-      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    if (tableScrollRef.current) {
+      const scrollLeft = tableScrollRef.current.scrollLeft;
+      if (topScrollRef.current) topScrollRef.current.scrollLeft = scrollLeft;
+      if (headerScrollRef.current) headerScrollRef.current.scrollLeft = scrollLeft;
+    }
+  }
+
+  function syncHeaderScroll() {
+    if (headerScrollRef.current && tableScrollRef.current) {
+      const scrollLeft = headerScrollRef.current.scrollLeft;
+      tableScrollRef.current.scrollLeft = scrollLeft;
+      if (topScrollRef.current) topScrollRef.current.scrollLeft = scrollLeft;
     }
   }
 
   function syncTopScroll() {
     if (topScrollRef.current && tableScrollRef.current) {
-      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+      const scrollLeft = topScrollRef.current.scrollLeft;
+      tableScrollRef.current.scrollLeft = scrollLeft;
+      if (headerScrollRef.current) headerScrollRef.current.scrollLeft = scrollLeft;
     }
   }
 
@@ -2288,112 +2578,122 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
         </div>
       </details>
 
-      <div
-        ref={tableScrollRef}
-        onScroll={syncTableScroll}
-        className="table-wrap"
-      >
-        <table>
-          <thead>
-            <tr>
-              {orderedVisibleColumns.map((colName, visibleIdx) => {
-                const width = columnWidths[colName] ?? getDefaultColumnWidth(colName);
-                const isSortActive = sortColumnName === colName;
-                const isColWrapped = wrappedColumns.has(colName);
-                return (
-                  <th
-                    key={colName}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, colName)}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                    onDrop={(e) => handleDrop(e, colName)}
-                    className={`th-reorderable ${draggedColumn === colName ? "is-dragging" : ""}`}
-                    title="Click & drag to reorder, or click to sort"
-                    style={{
-                      width: `${width}px`,
-                      minWidth: `${width}px`,
-                      maxWidth: `${width}px`,
-                      cursor: draggedColumn === colName ? "grabbing" : "grab"
-                    }}
-                  >
-                    <div className="th-container">
-                      <button
-                        type="button"
-                        className="th-sort-btn"
-                        onClick={() => handleSort(colName)}
-                        title={`Click to sort by ${colName}`}
-                      >
-                        <span>{colName}</span>
-                        {isSortActive ? (
-                          <span className="sort-arrow">{sortDirection === "asc" ? " ▲" : " ▼"}</span>
-                        ) : (
-                          <span className="sort-arrow-idle"> ↕</span>
-                        )}
-                      </button>
-                    </div>
-
-                    <div
-                      className="col-resize-handle"
-                      onMouseDown={(e) => handleResizeStart(e, colName, width)}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        toggleColumnWrap(colName);
-                      }}
-                      title="Drag to resize, or double-click vertical line to toggle text wrap for this column"
-                    />
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.length === 0 ? (
+      <div className="table-container-outer">
+        <div
+          ref={headerScrollRef}
+          onScroll={syncHeaderScroll}
+          className="table-header-wrap"
+        >
+          <table className="header-table">
+            <thead>
               <tr>
-                <td colSpan={Math.max(1, orderedVisibleColumns.length)}>No rows match the current view.</td>
-              </tr>
-            ) : (
-              pageRows.map((row, rowIndex) => {
-                const isRowWrapped = wrappedRows.has(rowIndex);
-                return (
-                  <tr
-                    key={`${page}-${rowIndex}`}
-                    className="table-row-item"
-                    onDoubleClick={() => toggleRowWrap(rowIndex)}
-                    title="Double-click row/horizontal line to toggle text wrap for this row"
-                  >
-                    {orderedVisibleColumns.map((colName) => {
-                      const dataIdx = colIndexMap.get(colName);
-                      const cellVal = dataIdx !== undefined ? row[dataIdx] : "";
-                      const width = columnWidths[colName] ?? getDefaultColumnWidth(colName);
-                      const isColWrapped = wrappedColumns.has(colName);
-                      const isCellWrapped = globalWrapText || isColWrapped || isRowWrapped;
-                      const formattedText = formatCell(cellVal, useLocalTime);
-
-                      return (
-                        <td
-                          key={colName}
-                          style={{
-                            width: `${width}px`,
-                            minWidth: `${width}px`,
-                            maxWidth: `${width}px`
-                          }}
+                {orderedVisibleColumns.map((colName) => {
+                  const width = columnWidths[colName] ?? getDefaultColumnWidth(colName);
+                  const isSortActive = sortColumnName === colName;
+                  return (
+                    <th
+                      key={colName}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, colName)}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, colName)}
+                      className={`th-reorderable ${draggedColumn === colName ? "is-dragging" : ""}`}
+                      title="Click & drag to reorder, or click to sort"
+                      style={{
+                        width: `${width}px`,
+                        minWidth: `${width}px`,
+                        maxWidth: `${width}px`,
+                        cursor: draggedColumn === colName ? "grabbing" : "grab"
+                      }}
+                    >
+                      <div className="th-container">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => handleSort(colName)}
+                          title={`Click to sort by ${colName}`}
                         >
-                          <span
-                            className={isCellWrapped ? "cell-content-wrap" : "cell-content-nowrap"}
-                            title={formattedText}
+                          <span>{colName}</span>
+                          {isSortActive ? (
+                            <span className="sort-arrow">{sortDirection === "asc" ? " ▲" : " ▼"}</span>
+                          ) : (
+                            <span className="sort-arrow-idle"> ↕</span>
+                          )}
+                        </button>
+                      </div>
+
+                      <div
+                        className="col-resize-handle"
+                        onMouseDown={(e) => handleResizeStart(e, colName, width)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          toggleColumnWrap(colName);
+                        }}
+                        title="Drag to resize, or double-click vertical line to toggle text wrap for this column"
+                      />
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+          </table>
+        </div>
+
+        <div
+          ref={tableScrollRef}
+          onScroll={syncTableScroll}
+          className="table-body-wrap"
+        >
+          <table className="body-table">
+            <tbody>
+              {pageRows.length === 0 ? (
+                <tr>
+                  <td colSpan={Math.max(1, orderedVisibleColumns.length)}>No rows match the current view.</td>
+                </tr>
+              ) : (
+                pageRows.map((row, rowIndex) => {
+                  const isRowWrapped = wrappedRows.has(rowIndex);
+                  return (
+                    <tr
+                      key={`${page}-${rowIndex}`}
+                      className="table-row-item"
+                      onDoubleClick={() => toggleRowWrap(rowIndex)}
+                      title="Double-click row/horizontal line to toggle text wrap for this row"
+                    >
+                      {orderedVisibleColumns.map((colName) => {
+                        const dataIdx = colIndexMap.get(colName);
+                        const cellVal = dataIdx !== undefined ? row[dataIdx] : "";
+                        const width = columnWidths[colName] ?? getDefaultColumnWidth(colName);
+                        const isColWrapped = wrappedColumns.has(colName);
+                        const isCellWrapped = globalWrapText || isColWrapped || isRowWrapped;
+                        const formattedText = formatCell(cellVal, useLocalTime);
+
+                        return (
+                          <td
+                            key={colName}
+                            style={{
+                              width: `${width}px`,
+                              minWidth: `${width}px`,
+                              maxWidth: `${width}px`
+                            }}
                           >
-                            {formattedText}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                            <span
+                              className={isCellWrapped ? "cell-content-wrap" : "cell-content-nowrap"}
+                              title={formattedText}
+                            >
+                              {formattedText}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="pager">
