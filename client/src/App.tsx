@@ -21,11 +21,12 @@ import {
   ArrowUp,
   ArrowDown
 } from "lucide-react";
-import { runQuery, fetchUserWorkspaces, checkBackendHealth, type AzureWorkspace, type BackendHealthResponse } from "./api";
+import { runQuery, fetchUserWorkspaces, fetchServerWorkspaces, checkBackendHealth, type AzureWorkspace, type BackendHealthResponse } from "./api";
 import type { QueryResponse, QueryTable } from "./types";
 import { Chatbot } from "./Chatbot";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "./authConfig";
+import { getEnv } from "./env";
 
 const starterQuery = `AppRequests
 | where TimeGenerated > ago(24h) and Success == false
@@ -481,7 +482,7 @@ function getTimespanKql(value: string, start?: string, end?: string): string {
 }
 
 function getPredefinedWorkspaces(): AzureWorkspace[] {
-  const envWorkspaces = import.meta.env.VITE_WORKSPACES || "";
+  const envWorkspaces = getEnv("VITE_WORKSPACES");
   const list: AzureWorkspace[] = [];
   
   if (envWorkspaces.trim()) {
@@ -500,7 +501,7 @@ function getPredefinedWorkspaces(): AzureWorkspace[] {
     });
   }
 
-  const defaultWs = import.meta.env.VITE_LOG_ANALYTICS_WORKSPACE_ID;
+  const defaultWs = getEnv("VITE_LOG_ANALYTICS_WORKSPACE_ID");
   if (defaultWs && defaultWs.trim() && !list.some(w => w.customerId === defaultWs.trim())) {
     list.unshift({
       id: defaultWs.trim(),
@@ -673,9 +674,20 @@ export function App() {
   }
 
   useEffect(() => {
-    if (isAuthenticated && accounts.length > 0) {
-      loadWorkspaces();
+    async function initWorkspaces() {
+      if (isAuthenticated && accounts.length > 0) {
+        loadWorkspaces();
+      } else {
+        const serverWs = await fetchServerWorkspaces();
+        const predefined = getPredefinedWorkspaces();
+        const combined = combineWorkspaces([...serverWs, ...predefined]);
+        setWorkspaces(combined);
+        if (combined.length > 0 && !workspaceId) {
+          setWorkspaceId(combined[0].customerId);
+        }
+      }
     }
+    initWorkspaces();
   }, [isAuthenticated, accounts]);
 
   function handleLogin() {
@@ -687,11 +699,11 @@ export function App() {
   }
 
   const clientIdConfigured = Boolean(
-    import.meta.env.VITE_AZURE_CLIENT_ID &&
-    !import.meta.env.VITE_AZURE_CLIENT_ID.includes("your_")
+    getEnv("VITE_AZURE_CLIENT_ID") &&
+    !getEnv("VITE_AZURE_CLIENT_ID").includes("your_")
   );
 
-  const authRequired = import.meta.env.VITE_REQUIRE_AZURE_AD_AUTH !== "false";
+  const authRequired = getEnv("VITE_REQUIRE_AZURE_AD_AUTH") === "true";
 
   // Require Azure AD login first before accessing the query workspace (unless disabled via VITE_REQUIRE_AZURE_AD_AUTH=false)
   if (authRequired && !isAuthenticated) {
@@ -997,6 +1009,7 @@ export function App() {
 
   async function handleRun() {
     setError(null);
+    setHealthStatus((prev) => (prev && !prev.ok ? null : prev));
     setLoading(true);
     setIsQueryEditorCollapsed(true);
     try {
@@ -1033,6 +1046,7 @@ export function App() {
         token
       });
       setResult(response);
+      setHealthStatus({ ok: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to run query.");
       refreshBackendHealth();
@@ -1754,10 +1768,10 @@ export function App() {
             </button>
           </div>
           <p style={{ margin: "0 0 10px 0", lineHeight: "1.5" }}>
-            The frontend application is unable to reach the backend API at <code>http://127.0.0.1:8080/api/health</code> ({healthStatus.error || "Connection refused"}).
+            The frontend application is unable to reach the backend API at <code>/api/health</code> ({healthStatus.error || "Connection refused"}).
           </p>
           <div style={{ background: "rgba(0, 0, 0, 0.35)", padding: "10px 14px", borderRadius: "6px", fontSize: "13px" }}>
-            <strong>Resolution:</strong> Run <code>npm run dev</code> in your terminal to launch both the backend server and frontend client.
+            <strong>Resolution:</strong> Ensure the backend service container is running and healthy.
           </div>
         </div>
       )}
@@ -1995,7 +2009,6 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
 
   // Column filter operators state: ==, !=, contains, !contains
   const [columnFilterOperators, setColumnFilterOperators] = useState<Record<string, "==" | "!=" | "contains" | "!contains">>({});
-  const [columnFilterTexts, setColumnFilterTexts] = useState<Record<string, string>>({});
 
   // Summary table states
   const [summaryScope, setSummaryScope] = useState<"filtered" | "all">("filtered");
@@ -2065,28 +2078,17 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
       if (colIdx < 0) return;
 
       const selectedSet = selectedValueFilters[colName];
-      const typedText = (columnFilterTexts[colName] || "").trim().toLowerCase();
       const op = columnFilterOperators[colName] || "==";
 
-      if ((selectedSet && selectedSet.size > 0) || typedText) {
+      if (selectedSet && selectedSet.size > 0) {
         filtered = filtered.filter((row) => {
           const rawVal = String(row[colIdx] ?? "");
-          const lowerVal = rawVal.toLowerCase();
 
-          if (typedText) {
-            if (op === "==" && lowerVal !== typedText) return false;
-            if (op === "!=" && lowerVal === typedText) return false;
-            if (op === "contains" && !lowerVal.includes(typedText)) return false;
-            if (op === "!contains" && lowerVal.includes(typedText)) return false;
-          }
-
-          if (selectedSet && selectedSet.size > 0) {
-            const hasVal = selectedSet.has(rawVal);
-            if (op === "==" || op === "contains") {
-              if (!hasVal) return false;
-            } else if (op === "!=" || op === "!contains") {
-              if (hasVal) return false;
-            }
+          const hasVal = selectedSet.has(rawVal);
+          if (op === "==" || op === "contains") {
+            if (!hasVal) return false;
+          } else if (op === "!=" || op === "!contains") {
+            if (hasVal) return false;
           }
 
           return true;
@@ -2137,7 +2139,7 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
       const comparison = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: "base" });
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [search, selectedValueFilters, columnFilterOperators, columnFilterTexts, sortColumnName, sortDirection, table.rows, table.columns]);
+  }, [search, selectedValueFilters, columnFilterOperators, sortColumnName, sortDirection, table.rows, table.columns]);
 
   const selectedColsList = useMemo(() => {
     return Array.from(summarySelectedColumns);
@@ -2386,11 +2388,14 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
                           <button
                             type="button"
                             onClick={() => {
-                              const values = uniqueColumnValues[hoveredColumn] || [];
-                              setSelectedValueFilters((prev) => ({
-                                ...prev,
-                                [hoveredColumn]: new Set(values)
-                              }));
+                              const visibleValues = (uniqueColumnValues[hoveredColumn] || []).filter(
+                                (val) => !flyoutSearch || val.toLowerCase().includes(flyoutSearch.toLowerCase())
+                              );
+                              setSelectedValueFilters((prev) => {
+                                const nextSet = new Set(prev[hoveredColumn] || []);
+                                visibleValues.forEach((v) => nextSet.add(v));
+                                return { ...prev, [hoveredColumn]: nextSet };
+                              });
                             }}
                           >
                             Select All
@@ -2444,20 +2449,14 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
                       <input
                         type="text"
                         placeholder={`Filter ${hoveredColumn} values...`}
-                        value={columnFilterTexts[hoveredColumn] || flyoutSearch}
-                        onChange={(e) => {
-                          setFlyoutSearch(e.target.value);
-                          setColumnFilterTexts((prev) => ({ ...prev, [hoveredColumn]: e.target.value }));
-                        }}
+                        value={flyoutSearch}
+                        onChange={(e) => setFlyoutSearch(e.target.value)}
                       />
-                      {(flyoutSearch || columnFilterTexts[hoveredColumn]) && (
+                      {flyoutSearch && (
                         <button
                           type="button"
                           className="clear-btn"
-                          onClick={() => {
-                            setFlyoutSearch("");
-                            setColumnFilterTexts((prev) => ({ ...prev, [hoveredColumn]: "" }));
-                          }}
+                          onClick={() => setFlyoutSearch("")}
                         >
                           ✕
                         </button>
@@ -3018,7 +3017,6 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
               type="button"
               onClick={() => {
                 setSelectedValueFilters({});
-                setColumnFilterTexts({});
               }}
               style={{
                 background: "rgba(244, 63, 94, 0.2)",

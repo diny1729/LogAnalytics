@@ -8,12 +8,17 @@ import "./styles.css";
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
-msalInstance.initialize().then(() => {
-  createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-      <MsalProvider instance={msalInstance}>
-        <App />
-      </MsalProvider>
-    </React.StrictMode>
-  );
-});
+msalInstance
+  .initialize()
+  .catch((err) => {
+    console.warn("MSAL initialization skipped or failed:", err);
+  })
+  .finally(() => {
+    createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <MsalProvider instance={msalInstance}>
+          <App />
+        </MsalProvider>
+      </React.StrictMode>
+    );
+  });

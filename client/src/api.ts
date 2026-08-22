@@ -147,3 +147,14 @@ export async function fetchUserWorkspaces(accessToken: string): Promise<AzureWor
     customerId: row.customerId || row[2]
   }));
 }
+
+export async function fetchServerWorkspaces(): Promise<AzureWorkspace[]> {
+  try {
+    const res = await fetch("/api/workspaces");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.workspaces || [];
+  } catch {
+    return [];
+  }
+}

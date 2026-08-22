@@ -57,9 +57,25 @@ app.use(
 app.use("/api", router);
 
 if (config.NODE_ENV === "production" || fs.existsSync(path.join(clientDist, "index.html"))) {
-  app.use(express.static(clientDist));
+  app.use(express.static(clientDist, { index: false }));
   app.get("*", (_request, response) => {
-    response.sendFile(path.join(clientDist, "index.html"));
+    const indexPath = path.join(clientDist, "index.html");
+    if (!fs.existsSync(indexPath)) {
+      response.status(404).send("Application index.html not found.");
+      return;
+    }
+    let html = fs.readFileSync(indexPath, "utf-8");
+    const runtimeConfig = {
+      VITE_REQUIRE_AZURE_AD_AUTH: process.env.VITE_REQUIRE_AZURE_AD_AUTH ?? config.VITE_REQUIRE_AZURE_AD_AUTH,
+      VITE_AZURE_CLIENT_ID: process.env.VITE_AZURE_CLIENT_ID ?? config.VITE_AZURE_CLIENT_ID,
+      VITE_AZURE_TENANT_ID: process.env.VITE_AZURE_TENANT_ID ?? config.VITE_AZURE_TENANT_ID,
+      VITE_WORKSPACES: process.env.VITE_WORKSPACES ?? config.VITE_WORKSPACES,
+      VITE_LOG_ANALYTICS_WORKSPACE_ID: (process.env.LOG_ANALYTICS_WORKSPACE_ID ?? config.LOG_ANALYTICS_WORKSPACE_ID) || ""
+    };
+    const scriptTag = `<script>window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};</script>`;
+    html = html.replace("</head>", `${scriptTag}\n</head>`);
+    response.setHeader("Content-Type", "text/html");
+    response.send(html);
   });
 }
 

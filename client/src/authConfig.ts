@@ -1,10 +1,11 @@
 import { Configuration, LogLevel } from "@azure/msal-browser";
+import { getEnv } from "./env";
 
 export const msalConfig: Configuration = {
   auth: {
-    // Read from Vite environment variables (fallback to empty for local dev without env)
-    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || "",
-    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || "common"}`,
+    // Read runtime environment variables (injected by server in k8s/production or from Vite env in dev)
+    clientId: getEnv("VITE_AZURE_CLIENT_ID"),
+    authority: `https://login.microsoftonline.com/${getEnv("VITE_AZURE_TENANT_ID") || "common"}`,
     redirectUri: "/",
   },
   cache: {

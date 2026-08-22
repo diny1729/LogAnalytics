@@ -5,7 +5,7 @@ metadata:
   labels:
     app: loganalytics-app
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: loganalytics-app
@@ -19,17 +19,30 @@ spec:
         image: <your-acr-name>.azurecr.io/loganalytics-app:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 8080
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
         envFrom:
         - secretRef:
             name: loganalytics-app-secret # Ensure you create this secret with your .env vars in AKS
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "250m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "768Mi"
+            cpu: "1000m"
 
 ---
 apiVersion: v1
@@ -40,5 +53,7 @@ spec:
   selector:
     app: loganalytics-app
   ports:
-  - port: 8080
+  - name: http
+    port: 8080
     targetPort: 8080
+    appProtocol: http

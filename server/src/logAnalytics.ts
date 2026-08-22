@@ -1,4 +1,10 @@
-import { DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential } from "@azure/identity";
+import {
+  DefaultAzureCredential,
+  AzureCliCredential,
+  ClientSecretCredential,
+  ChainedTokenCredential,
+  type TokenCredential
+} from "@azure/identity";
 import {
   LogsQueryClient,
   LogsQueryResultStatus,
@@ -7,19 +13,38 @@ import {
 import { config } from "./config.js";
 import type { QueryResponse, QueryTable } from "./types.js";
 
-// Clean up empty, whitespace, or placeholder env vars so Azure identity falls back to Azure CLI smoothly
-["AZURE_CLIENT_SECRET", "AZURE_TENANT_ID", "AZURE_CLIENT_ID"].forEach(key => {
-  const val = process.env[key];
-  if (!val || !val.trim() || val.startsWith("YOUR_") || val.startsWith("22222222") || val.startsWith("33333333")) {
-    delete process.env[key];
+function createAzureCredential(): TokenCredential {
+  const tenantId = process.env.AZURE_TENANT_ID?.trim();
+  const clientId = process.env.AZURE_CLIENT_ID?.trim();
+  const clientSecret = process.env.AZURE_CLIENT_SECRET?.trim();
+
+  const isPlaceholder = (val?: string) =>
+    !val ||
+    val.includes("your-") ||
+    val.startsWith("YOUR_") ||
+    val.startsWith("22222222") ||
+    val.startsWith("33333333");
+
+  if (tenantId && clientId && clientSecret && !isPlaceholder(tenantId) && !isPlaceholder(clientId) && !isPlaceholder(clientSecret)) {
+    console.log("🔐 Azure Log Analytics Auth: Using Service Principal (SPN) credentials.");
+    return new ClientSecretCredential(tenantId, clientId, clientSecret);
   }
-});
 
-const credential = new ChainedTokenCredential(
-  new DefaultAzureCredential(),
-  new AzureCliCredential()
-);
+  // Clean placeholders from process.env so DefaultAzureCredential doesn't fail on bogus variables
+  ["AZURE_CLIENT_SECRET", "AZURE_TENANT_ID", "AZURE_CLIENT_ID"].forEach((key) => {
+    if (isPlaceholder(process.env[key])) {
+      delete process.env[key];
+    }
+  });
 
+  console.log("🔐 Azure Log Analytics Auth: Using DefaultAzureCredential / Azure CLI credential chain.");
+  return new ChainedTokenCredential(
+    new DefaultAzureCredential(),
+    new AzureCliCredential()
+  );
+}
+
+const credential = createAzureCredential();
 const client = new LogsQueryClient(credential);
 
 export async function queryWorkspaceLogs(args: {
