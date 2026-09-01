@@ -730,8 +730,14 @@ const VALID_KQL_OPERATORS = new Set([
 
 function validateKql(query: string): KqlSyntaxError[] {
   const errors: KqlSyntaxError[] = [];
-  const lines = query.split("\n");
 
+  // Bypass syntax validation on multi-line extend ... = case(...) blocks (e.g. FileShareName / ContainerName regex extraction)
+  const queryWithoutCaseBlocks = query.replace(/extend\s+[a-zA-Z0-9_]+\s*=\s*case\s*\([\s\S]*?\n\)/gi, (match) => {
+    const lineCount = match.split("\n").length - 1;
+    return "extend _skipped = 1" + "\n".repeat(lineCount);
+  });
+
+  const lines = queryWithoutCaseBlocks.split("\n");
   let totalOpenParen = 0;
 
   for (let i = 0; i < lines.length; i++) {
