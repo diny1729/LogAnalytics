@@ -745,51 +745,28 @@ function validateKql(query: string): KqlSyntaxError[] {
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
 
-    let inSingleQuote = false;
-    let inDoubleQuote = false;
-    let isVerbatim = false;
+    // Strip verbatim double-quoted strings: @"..."
+    let sanitized = rawLine.replace(/@"(?:[^"])*"/g, '""');
+    // Strip verbatim single-quoted strings: @'...'
+    sanitized = sanitized.replace(/@'(?:[^'])*'/g, "''");
+    // Strip normal double-quoted strings: "..."
+    sanitized = sanitized.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    // Strip normal single-quoted strings: '...'
+    sanitized = sanitized.replace(/'(?:[^'\\]|\\.)*'/g, "''");
 
-    for (let j = 0; j < rawLine.length; j++) {
-      const char = rawLine[j];
-      const prevChar = j > 0 ? rawLine[j - 1] : "";
+    const doubleQuoteCount = (sanitized.match(/"/g) || []).length;
+    const singleQuoteCount = (sanitized.match(/'/g) || []).length;
 
-      if (!inSingleQuote && !inDoubleQuote) {
-        if (char === "@" && (rawLine[j + 1] === '"' || rawLine[j + 1] === "'")) {
-          isVerbatim = true;
-          continue;
-        }
-        if (char === "'") {
-          inSingleQuote = true;
-          continue;
-        }
-        if (char === '"') {
-          inDoubleQuote = true;
-          continue;
-        }
-        if (char === "(") totalOpenParen++;
-        if (char === ")") totalOpenParen--;
-      } else if (inSingleQuote) {
-        if (char === "'") {
-          if (isVerbatim || prevChar !== "\\") {
-            inSingleQuote = false;
-            isVerbatim = false;
-          }
-        }
-      } else if (inDoubleQuote) {
-        if (char === '"') {
-          if (isVerbatim || prevChar !== "\\") {
-            inDoubleQuote = false;
-            isVerbatim = false;
-          }
-        }
-      }
+    if (doubleQuoteCount % 2 !== 0) {
+      errors.push({ line: lineNum, message: `Unclosed double quote (") on line ${lineNum}` });
     }
-
-    if (inSingleQuote) {
+    if (singleQuoteCount % 2 !== 0) {
       errors.push({ line: lineNum, message: `Unclosed single quote (') on line ${lineNum}` });
     }
-    if (inDoubleQuote) {
-      errors.push({ line: lineNum, message: `Unclosed double quote (") on line ${lineNum}` });
+
+    for (let j = 0; j < sanitized.length; j++) {
+      if (sanitized[j] === "(") totalOpenParen++;
+      if (sanitized[j] === ")") totalOpenParen--;
     }
 
     if (trimmed.startsWith("|")) {
