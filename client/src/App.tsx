@@ -747,12 +747,42 @@ function validateKql(query: string): KqlSyntaxError[] {
 
     let inSingleQuote = false;
     let inDoubleQuote = false;
+    let isVerbatim = false;
+
     for (let j = 0; j < rawLine.length; j++) {
       const char = rawLine[j];
-      if (char === "'" && !inDoubleQuote) inSingleQuote = !inSingleQuote;
-      if (char === '"' && !inSingleQuote) inDoubleQuote = !inDoubleQuote;
-      if (char === "(" && !inSingleQuote && !inDoubleQuote) totalOpenParen++;
-      if (char === ")" && !inSingleQuote && !inDoubleQuote) totalOpenParen--;
+      const prevChar = j > 0 ? rawLine[j - 1] : "";
+
+      if (!inSingleQuote && !inDoubleQuote) {
+        if (char === "@" && (rawLine[j + 1] === '"' || rawLine[j + 1] === "'")) {
+          isVerbatim = true;
+          continue;
+        }
+        if (char === "'") {
+          inSingleQuote = true;
+          continue;
+        }
+        if (char === '"') {
+          inDoubleQuote = true;
+          continue;
+        }
+        if (char === "(") totalOpenParen++;
+        if (char === ")") totalOpenParen--;
+      } else if (inSingleQuote) {
+        if (char === "'") {
+          if (isVerbatim || prevChar !== "\\") {
+            inSingleQuote = false;
+            isVerbatim = false;
+          }
+        }
+      } else if (inDoubleQuote) {
+        if (char === '"') {
+          if (isVerbatim || prevChar !== "\\") {
+            inDoubleQuote = false;
+            isVerbatim = false;
+          }
+        }
+      }
     }
 
     if (inSingleQuote) {
@@ -1672,7 +1702,7 @@ function GraphicalPresetSelect({
     if (!search.trim()) return presets;
     const term = search.toLowerCase();
     return presets.filter(
-      (p) => p.name.toLowerCase().includes(term) || getPresetTable(p).toLowerCase().includes(term)
+      (p) => p.name.toLowerCase().includes(term)
     );
   }, [presets, search]);
 
@@ -1702,12 +1732,7 @@ function GraphicalPresetSelect({
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
           <span style={{ fontSize: "14px" }}>⚡</span>
-          {activePreset ? (
-            <span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", fontWeight: 800, backgroundColor: activeColor, color: presetColors[activePreset.id]?.text || "#fff", flexShrink: 0 }}>
-              {getPresetTable(activePreset)}
-            </span>
-          ) : null}
-          <span style={{ fontWeight: 700, color: activePreset ? "#f8fafc" : "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ fontWeight: 700, color: activePreset ? activeColor : "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {activePreset ? activePreset.name : `-- Select a Log Preset (${presets.length}) --`}
           </span>
         </div>
@@ -1740,7 +1765,7 @@ function GraphicalPresetSelect({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔍 Search preset name, table, or category..."
+              placeholder="🔍 Search preset name..."
               style={{
                 width: "100%",
                 padding: "7px 10px",
@@ -1758,8 +1783,6 @@ function GraphicalPresetSelect({
             {filteredPresets.map((preset) => {
               const isSelected = activePreset?.id === preset.id;
               const colorInfo = presetColors[preset.id] || { bg: "#38bdf8", text: "#ffffff" };
-              const tableName = getPresetTable(preset);
-              const desc = getPresetDesc(preset);
 
               return (
                 <div
@@ -1769,7 +1792,7 @@ function GraphicalPresetSelect({
                     setIsOpen(false);
                   }}
                   style={{
-                    padding: "9px 12px",
+                    padding: "10px 14px",
                     borderRadius: "8px",
                     background: isSelected
                       ? `linear-gradient(135deg, ${colorInfo.bg}33, rgba(15, 23, 42, 0.8))`
@@ -1797,26 +1820,17 @@ function GraphicalPresetSelect({
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
                     <span
                       style={{
-                        padding: "3px 7px",
-                        borderRadius: "4px",
-                        fontSize: "10px",
-                        fontWeight: 800,
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
                         backgroundColor: colorInfo.bg,
-                        color: colorInfo.text,
-                        whiteSpace: "nowrap",
+                        boxShadow: `0 0 8px ${colorInfo.bg}`,
                         flexShrink: 0
                       }}
-                    >
-                      {tableName}
+                    />
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? colorInfo.bg : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {preset.name}
                     </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {preset.name}
-                      </span>
-                      <span style={{ fontSize: "10px", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {desc}
-                      </span>
-                    </div>
                   </div>
 
                   {isSelected && (
