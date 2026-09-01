@@ -117,7 +117,19 @@ if (Test-Path $IngressPath) {
     kubectl apply -f $IngressPath
 }
 
-# Step 10: Verify Rollout Status
+# Step 9: Apply Istio Ingress (if present)
+$IngressPath = Join-Path $ScriptDir "../aks/istio-ingress.yaml"
+if (Test-Path $IngressPath) {
+    Write-Host "Applying Istio Ingress manifest..." -ForegroundColor Green
+    kubectl apply -f $IngressPath
+}
+
+# Step 10: Restart Deployment 
+Write-Host "Restarting Deployment rollout..." -ForegroundColor Cyan
+kubectl rollout restart deployment/loganalytics-app
+
+
+# Step 11: Verify Rollout Status
 Write-Host "Waiting for deployment rollout to complete..." -ForegroundColor Cyan
 kubectl rollout status deployment/loganalytics-app --timeout=60s
 

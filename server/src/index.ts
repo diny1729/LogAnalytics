@@ -70,7 +70,8 @@ if (config.NODE_ENV === "production" || fs.existsSync(path.join(clientDist, "ind
       VITE_AZURE_CLIENT_ID: process.env.VITE_AZURE_CLIENT_ID ?? config.VITE_AZURE_CLIENT_ID,
       VITE_AZURE_TENANT_ID: process.env.VITE_AZURE_TENANT_ID ?? config.VITE_AZURE_TENANT_ID,
       VITE_WORKSPACES: process.env.VITE_WORKSPACES ?? config.VITE_WORKSPACES,
-      VITE_LOG_ANALYTICS_WORKSPACE_ID: (process.env.LOG_ANALYTICS_WORKSPACE_ID ?? config.LOG_ANALYTICS_WORKSPACE_ID) || ""
+      VITE_LOG_ANALYTICS_WORKSPACE_ID: (process.env.LOG_ANALYTICS_WORKSPACE_ID ?? config.LOG_ANALYTICS_WORKSPACE_ID) || "",
+      VITE_ALLOWED_AZURE_AD_GROUPS: process.env.VITE_ALLOWED_AZURE_AD_GROUPS ?? config.VITE_ALLOWED_AZURE_AD_GROUPS
     };
     const scriptTag = `<script>window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};</script>`;
     html = html.replace("</head>", `${scriptTag}\n</head>`);

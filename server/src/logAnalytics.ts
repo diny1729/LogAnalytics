@@ -85,16 +85,35 @@ export async function queryWorkspaceLogs(args: {
       ? result.partialTables.map(mapTable)
       : result.tables.map(mapTable);
 
+    const partialMsg = result.status === LogsQueryResultStatus.PartialFailure
+      ? (result.partialError?.message || (typeof result.partialError === "string" ? result.partialError : JSON.stringify(result.partialError || {})))
+      : undefined;
+
+    if (partialMsg) {
+      console.warn(`⚠️ [Azure Log Analytics Warning / Truncation Logged]
+  - Workspace ID: ${args.workspaceId}
+  - Timespan: ${args.timespan}
+  - Max Rows Requested: ${effectiveMaxRows}
+  - Warning / Partial Error: ${partialMsg}
+  - Statistics: ${JSON.stringify(result.statistics || {})}
+  - Executed KQL:
+${args.query}`);
+    } else {
+      console.log(`✅ [Azure Log Analytics Query Succeeded] Workspace: ${args.workspaceId} | Timespan: ${args.timespan} | Max Rows: ${effectiveMaxRows} | Tables Returned: ${tables.length}`);
+    }
+
     return {
       tables,
-      partialError:
-        result.status === LogsQueryResultStatus.PartialFailure
-          ? result.partialError?.message
-          : undefined,
+      partialError: partialMsg,
       statistics: result.statistics
     };
   } catch (err) {
-    console.error("❌ Azure Log Analytics Query Error:", err);
+    console.error(`❌ [Azure Log Analytics Query Failed]
+  - Workspace ID: ${args.workspaceId}
+  - Timespan: ${args.timespan}
+  - Executed KQL:
+${args.query}
+  - Error Details:`, err);
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("az login") || msg.includes("CredentialUnavailableError") || msg.includes("DefaultAzureCredential")) {
       throw new Error("Azure Authentication Failed: Please run 'az login' in your terminal OR configure AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET in .env OR set VITE_REQUIRE_AZURE_AD_AUTH=true in .env to login via Azure AD.");

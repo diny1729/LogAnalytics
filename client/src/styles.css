@@ -24,6 +24,30 @@ body {
   color: #f8fafc;
 }
 
+/* Custom Dropdown List & Select Styling - Matches Page UI Colors */
+select,
+option,
+optgroup {
+  background-color: #062330 !important;
+  color: #f8fafc !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}
+
+option {
+  padding: 8px 12px !important;
+  background-color: #062330 !important;
+  color: #f8fafc !important;
+  border-bottom: 1px solid rgba(45, 212, 191, 0.1) !important;
+}
+
+option:hover,
+option:focus,
+option:active,
+option:checked {
+  background-color: #0d9488 !important;
+  color: #ffffff !important;
+}
+
 .shell {
   min-height: 100vh;
   padding: 24px;
@@ -114,6 +138,105 @@ table {
   border-radius: 12px;
   border: 1px solid rgba(16, 185, 129, 0.25);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* Multi-Tab KQL Query Workbench Tabs */
+.tab-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tab-bar-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.query-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(6, 32, 44, 0.75);
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  border-radius: 8px 8px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.query-tab:hover {
+  background: rgba(10, 44, 58, 0.9);
+  color: #f8fafc;
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+.query-tab.active {
+  background: rgba(10, 44, 58, 0.98);
+  color: #34d399;
+  border-color: #2dd4bf;
+  border-bottom: 2px solid #2dd4bf;
+  box-shadow: 0 -2px 10px rgba(45, 212, 191, 0.15);
+}
+
+.tab-icon {
+  font-size: 12px;
+}
+
+.tab-title {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.tab-close-btn:hover {
+  background: rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+}
+
+.add-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px dashed rgba(16, 185, 129, 0.4);
+  border-radius: 6px;
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.add-tab-btn:hover {
+  background: rgba(16, 185, 129, 0.28);
+  border-color: #34d399;
+  color: #ffffff;
 }
 
 h1,
@@ -248,6 +371,148 @@ p {
 
 .dynamic-filter-select:focus {
   border-color: #2dd4bf;
+}
+
+.dynamic-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.filter-action-btn {
+  background: rgba(13, 148, 136, 0.15);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  color: #34d399;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-action-btn:hover:not(:disabled) {
+  background: rgba(13, 148, 136, 0.3);
+  border-color: #2dd4bf;
+  color: #ffffff;
+}
+
+.filter-action-btn.clear {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #fecdd3;
+}
+
+.filter-action-btn.clear:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: #f43f5e;
+  color: #ffffff;
+}
+
+.filter-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dynamic-filter-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  background: rgba(4, 20, 28, 0.9);
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.dynamic-filter-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e2e8f0;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.dynamic-filter-option-item:hover {
+  background: rgba(45, 212, 191, 0.12);
+  color: #ffffff;
+}
+
+.dynamic-filter-option-item.selected {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  font-weight: 600;
+}
+
+.dynamic-filter-option-item input[type="checkbox"] {
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.dynamic-filter-option-item .option-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dynamic-filter-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.selected-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  max-width: 100%;
+}
+
+.selected-chip .chip-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.selected-chip .chip-remove {
+  background: transparent;
+  border: none;
+  color: #a7f3d0;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+.selected-chip .chip-remove:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .security-badge {

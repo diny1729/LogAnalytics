@@ -19,7 +19,8 @@ import {
   X,
   BarChart3,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Plus
 } from "lucide-react";
 import { runQuery, fetchUserWorkspaces, fetchServerWorkspaces, checkBackendHealth, type AzureWorkspace, type BackendHealthResponse } from "./api";
 import type { QueryResponse, QueryTable } from "./types";
@@ -33,6 +34,122 @@ const starterQuery = `AppRequests
 | summarize Failures=count() by Name, ResultCode
 | order by Failures desc`;
 
+function formatFilterClause(field: string, val: string | string[]): string {
+  if (Array.isArray(val)) {
+    if (val.length === 0) return "";
+    if (val.length === 1) return `| where ${field} == "${val[0]}"`;
+    return `| where ${field} in (${val.map((v) => `"${v}"`).join(", ")})`;
+  }
+  return val ? `| where ${field} == "${val}"` : "";
+}
+
+function getRelatedColumns(
+  queryText: string,
+  tableColumns: string[],
+  presetProjectCols?: Set<string>
+): string[] {
+  if (!tableColumns || tableColumns.length === 0) return [];
+
+  // Strip single-line KQL comments (lines starting with // or inline //)
+  const activeCode = queryText
+    .split("\n")
+    .map((line) => {
+      const commentIdx = line.indexOf("//");
+      return commentIdx >= 0 ? line.slice(0, commentIdx) : line;
+    })
+    .join("\n");
+
+  // 1. Check for | summarize clause
+  const summarizeMatch = activeCode.match(/\|\s*summarize\s+([^|]+)/i);
+  if (summarizeMatch) {
+    return tableColumns;
+  }
+
+  // 2. Check for | project clause (take the last active | project clause)
+  const projectMatches = [...activeCode.matchAll(/\|\s*project\s+([^|]+)/gi)];
+  if (projectMatches.length > 0) {
+    const lastProjectClause = projectMatches[projectMatches.length - 1][1].trim();
+    const projectedNames = lastProjectClause
+      .split(",")
+      .map((item) => {
+        const parts = item.trim().split("=");
+        return parts[0].trim();
+      })
+      .filter(Boolean);
+
+    const projectedSet = new Set(projectedNames.map((n) => n.toLowerCase()));
+    const matched = tableColumns.filter((col) => projectedSet.has(col.toLowerCase()));
+    if (matched.length > 0) {
+      return matched;
+    }
+  }
+
+  // 3. Check presetProjectCols if present
+  if (presetProjectCols && presetProjectCols.size > 0) {
+    const matched = tableColumns.filter((col) => presetProjectCols.has(col));
+    if (matched.length > 0) {
+      return matched;
+    }
+  }
+
+  // 4. Default fallback: all columns returned
+  return tableColumns;
+}
+
+export type FilterOperator = "==" | "!=" | "contains" | "!contains" | "<" | "<=" | ">" | ">=";
+
+function evaluateFilterCondition(
+  rawVal: unknown,
+  selectedSet: Set<string>,
+  op: FilterOperator
+): boolean {
+  if (!selectedSet || selectedSet.size === 0) return true;
+  const strVal = rawVal === null || rawVal === undefined ? "" : String(rawVal);
+
+  if (op === "==" || op === "contains") {
+    return selectedSet.has(strVal);
+  }
+  if (op === "!=" || op === "!contains") {
+    return !selectedSet.has(strVal);
+  }
+
+  // Comparison operators: <, <=, >, >=
+  const numCell = Number(rawVal);
+  const isCellNum = rawVal !== null && rawVal !== undefined && rawVal !== "" && !isNaN(numCell);
+
+  const dateCell = typeof rawVal === "string" || rawVal instanceof Date ? new Date(String(rawVal)).getTime() : NaN;
+  const isCellDate = !isNaN(dateCell) && typeof rawVal === "string" && (rawVal.includes("-") || rawVal.includes(":"));
+
+  return Array.from(selectedSet).some((targetStr) => {
+    const numTarget = Number(targetStr);
+    const isTargetNum = targetStr !== "" && !isNaN(numTarget);
+
+    if (isCellNum && isTargetNum) {
+      if (op === "<") return numCell < numTarget;
+      if (op === "<=") return numCell <= numTarget;
+      if (op === ">") return numCell > numTarget;
+      if (op === ">=") return numCell >= numTarget;
+    }
+
+    const dateTarget = new Date(targetStr).getTime();
+    if (isCellDate && !isNaN(dateTarget)) {
+      if (op === "<") return dateCell < dateTarget;
+      if (op === "<=") return dateCell <= dateTarget;
+      if (op === ">") return dateCell > dateTarget;
+      if (op === ">=") return dateCell >= dateTarget;
+    }
+
+    // String comparison fallback
+    const cmp = strVal.localeCompare(targetStr, undefined, { numeric: true, sensitivity: "base" });
+    if (op === "<") return cmp < 0;
+    if (op === "<=") return cmp <= 0;
+    if (op === ">") return cmp > 0;
+    if (op === ">=") return cmp >= 0;
+
+    return false;
+  });
+}
+
 type PresetOption = { label: string; clause: string };
 
 type PresetQuery = {
@@ -41,7 +158,7 @@ type PresetQuery = {
   baseQuery: string;
   options: PresetOption[];
   projectColumns: string[];
-  dynamicFilters?: { label: string; field: string; clauseTemplate: (val: string) => string }[];
+  dynamicFilters?: { label: string; field: string; clauseTemplate: (val: string | string[]) => string }[];
 };
 
 const PRESETS: PresetQuery[] = [
@@ -64,8 +181,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "hostName_s", "httpStatusDetails_s", "requestUri_s", "clientIp_s", "socketIp_s", "originName_s", "ErrorInfo_s", "originUrl_s", "routingRuleName_s", "timeTaken_d", "clientCountry_s"],
     dynamicFilters: [
-      { label: "AFD Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
-      { label: "DNS Name (hostName_s)", field: "hostName_s", clauseTemplate: (val: string) => `| where hostName_s == "${val}"` }
+      { label: "AFD Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "DNS Name (hostName_s)", field: "hostName_s", clauseTemplate: (val) => formatFilterClause("hostName_s", val) }
     ]
   },
   {
@@ -83,8 +200,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "host_s", "action_s", "ruleName_s", "requestUri_s", "clientIP_s", "trackingReference_s", "socketIP_s"],
     dynamicFilters: [
-      { label: "AFD Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
-      { label: "DNS Name (host_s)", field: "host_s", clauseTemplate: (val: string) => `| where host_s == "${val}"` }
+      { label: "AFD Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "DNS Name (host_s)", field: "host_s", clauseTemplate: (val) => formatFilterClause("host_s", val) }
     ]
   },
   {
@@ -107,7 +224,7 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "Action", "SourceIp", "SourcePort", "DestinationIp", "DestinationPort", "DestinationFqdn", "Protocol", "RuleCollectionGroup", "RuleCollection", "Rule", "ActionReason"],
     dynamicFilters: [
-      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` }
+      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) }
     ]
   },
   {
@@ -134,7 +251,7 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "SourceIp", "SourcePort", "DestinationPort", "Protocol", "Action", "Policy", "RuleCollectionGroup", "RuleCollection", "Rule", "ActionReason", "Fqdn", "TargetUrl", "IsTlsInspected", "WebCategory", "IsExplicitProxyRequest"],
     dynamicFilters: [
-      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` }
+      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) }
     ]
   },
   {
@@ -176,37 +293,57 @@ const PRESETS: PresetQuery[] = [
       "ruleName_s"
     ],
     dynamicFilters: [
-      { label: "App Gateway Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
-      { label: "Original Host (originalHost_s)", field: "originalHost_s", clauseTemplate: (val: string) => `| where originalHost_s == "${val}"` }
+      { label: "App Gateway Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "Original Host (originalHost_s)", field: "originalHost_s", clauseTemplate: (val) => formatFilterClause("originalHost_s", val) }
     ]
   },
   {
     id: "storage-file",
     name: "Storage Fileshare Log",
-    baseQuery: 'StorageFileLogs\n| extend FileShareName = case(Uri startswith "https://", extract(@"https://[^/]+/([^/?]+)", 1, Uri), Uri startswith "\\\\", extract(@"\\\\\\\\[^\\\\]+\\\\\\([^\\\\]+)", 1, Uri), "Unknown")\n| extend IPOnly = tostring(split(CallerIpAddress, ":")[0])\n| where (CallerIpAddress !contains "10.200" and FileShareName contains "raefordqa" and MetricResponseType !contains "Success") or (MetricResponseType contains "Success" and Uri contains "DHL-LMS" and MetricResponseType !contains "ClientOtherError")',
+    baseQuery: 'StorageFileLogs\n| extend FileShareName = case(\n    tostring(Uri) startswith "http://" or tostring(Uri) startswith "https://",\n    extract(@"https?://[^/]+/([^/?#]+)", 1, tostring(Uri)),\n    tostring(Uri) startswith @"\\\\",\n    extract(@"\\\\[^\\\\]+\\\\([^\\\\]+)", 1, tostring(Uri)),\n    coalesce(tostring(split(ObjectKey, "/")[0]), "Unknown")\n)\n| extend IPOnly = tostring(split(CallerIpAddress, ":")[0])',
     options: [
       { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
       { label: "AccountName", clause: '| where AccountName == ""' },
       { label: "FileShareName", clause: '| where FileShareName contains ""' },
+      { label: "OperationName", clause: '| where OperationName == ""' },
+      { label: "StatusCode", clause: '| where StatusCode == ""' },
+      { label: "Protocol", clause: '| where Protocol == ""' },
       { label: "Uri", clause: '| where Uri contains ""' },
       { label: "CallerIpAddress", clause: '| where CallerIpAddress == ""' },
       { label: "IPOnly", clause: '| where IPOnly == ""' },
       { label: "ObjectKey", clause: '| where ObjectKey == ""' },
       { label: "Category", clause: '| where Category == ""' },
       { label: "MetricResponseType", clause: '| where MetricResponseType == ""' },
-      { label: "OperationName", clause: '| where OperationName == ""' },
-      { label: "SmbCommandMinor", clause: '| where SmbCommandMinor == ""' }
+      { label: "SmbCommandMinor", clause: '| where SmbCommandMinor == ""' },
+      { label: "AuthenticationType", clause: '| where AuthenticationType == ""' },
+      { label: "UserAgentHeader", clause: '| where UserAgentHeader == ""' }
     ],
-    projectColumns: ["TimeGenerated", "AccountName", "FileShareName", "Uri", "CallerIpAddress", "IPOnly", "ObjectKey", "Category", "MetricResponseType", "OperationName", "SmbCommandMinor"],
+    projectColumns: [
+      "TimeGenerated",
+      "AccountName",
+      "FileShareName",
+      "OperationName",
+      "StatusCode",
+      "Protocol",
+      "Uri",
+      "CallerIpAddress",
+      "IPOnly",
+      "ObjectKey",
+      "Category",
+      "MetricResponseType",
+      "SmbCommandMinor",
+      "AuthenticationType",
+      "UserAgentHeader"
+    ],
     dynamicFilters: [
-      { label: "Storage Account Name", field: "AccountName", clauseTemplate: (val: string) => `| where AccountName == "${val}"` },
-      { label: "File Share Name", field: "FileShareName", clauseTemplate: (val: string) => `| where FileShareName == "${val}"` }
+      { label: "Storage Account Name", field: "AccountName", clauseTemplate: (val) => formatFilterClause("AccountName", val) },
+      { label: "File Share Name", field: "FileShareName", clauseTemplate: (val) => formatFilterClause("FileShareName", val) }
     ]
   },
   {
     id: "storage-blob",
     name: "Storage Blob Log",
-    baseQuery: 'StorageBlobLogs\n| extend ContainerName = case(Uri startswith "https://", extract(@"https://[^/]+(:443)?/([^/?]+)", 2, Uri), Uri startswith "\\\\", extract(@"\\\\\\\\[^\\\\]+\\\\\\([^\\\\]+)", 1, Uri), "Unknown")\n| where CallerIpAddress !contains "10.50" and CallerIpAddress !contains "10.200"\n| where ObjectKey contains "Demand"\n| extend CallerIp = tostring(split(CallerIpAddress, ":")[0]), CallerPort = tostring(split(CallerIpAddress, ":")[1])',
+    baseQuery: 'StorageBlobLogs\n| extend ContainerName = case(\n    tostring(Uri) startswith "http://" or tostring(Uri) startswith "https://",\n    extract(@"https?://[^/]+/([^/?#]+)", 1, tostring(Uri)),\n    tostring(Uri) startswith @"\\\\",\n    extract(@"\\\\[^\\\\]+\\\\([^\\\\]+)", 1, tostring(Uri)),\n    coalesce(tostring(split(ObjectKey, "/")[0]), "Unknown")\n)\n| where CallerIpAddress !contains "10.50" and CallerIpAddress !contains "10.200"\n| where ObjectKey contains "Demand"\n| extend CallerIp = tostring(split(CallerIpAddress, ":")[0]), CallerPort = tostring(split(CallerIpAddress, ":")[1])',
     options: [
       { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
       { label: "ContainerName", clause: '| where ContainerName contains ""' },
@@ -223,8 +360,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "AccountName", "ContainerName", "Category", "StatusCode", "CallerIpAddress", "CallerIp", "CallerPort", "OperationName", "StatusText", "ObjectKey", "AuthenticationType", "Uri"],
     dynamicFilters: [
-      { label: "Storage Account Name", field: "AccountName", clauseTemplate: (val: string) => `| where AccountName == "${val}"` },
-      { label: "Container Name", field: "ContainerName", clauseTemplate: (val: string) => `| where ContainerName == "${val}"` }
+      { label: "Storage Account Name", field: "AccountName", clauseTemplate: (val) => formatFilterClause("AccountName", val) },
+      { label: "Container Name", field: "ContainerName", clauseTemplate: (val) => formatFilterClause("ContainerName", val) }
     ]
   },
   {
@@ -242,8 +379,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Name", "ObjectKind", "KubeEventType", "Reason", "Message", "Namespace"],
     dynamicFilters: [
-      { label: "Namespace", field: "Namespace", clauseTemplate: (val: string) => `| where Namespace == "${val}"` },
-      { label: "Object Kind", field: "ObjectKind", clauseTemplate: (val: string) => `| where ObjectKind == "${val}"` }
+      { label: "Namespace", field: "Namespace", clauseTemplate: (val) => formatFilterClause("Namespace", val) },
+      { label: "Object Kind", field: "ObjectKind", clauseTemplate: (val) => formatFilterClause("ObjectKind", val) }
     ]
   },
   {
@@ -259,8 +396,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "OperationName", "SenderUsername", "DeliveryStatus", "RecipientId"],
     dynamicFilters: [
-      { label: "Delivery Status", field: "DeliveryStatus", clauseTemplate: (val: string) => `| where DeliveryStatus == "${val}"` },
-      { label: "Sender Username", field: "SenderUsername", clauseTemplate: (val: string) => `| where SenderUsername == "${val}"` }
+      { label: "Delivery Status", field: "DeliveryStatus", clauseTemplate: (val) => formatFilterClause("DeliveryStatus", val) },
+      { label: "Sender Username", field: "SenderUsername", clauseTemplate: (val) => formatFilterClause("SenderUsername", val) }
     ]
   },
   {
@@ -277,8 +414,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "id_s", "Category", "OperationName", "Resource", "identity_claim_upn_s", "ResultType"],
     dynamicFilters: [
-      { label: "Key Vault Resource", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
-      { label: "Operation Name", field: "OperationName", clauseTemplate: (val: string) => `| where OperationName == "${val}"` }
+      { label: "Key Vault Resource", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "Operation Name", field: "OperationName", clauseTemplate: (val) => formatFilterClause("OperationName", val) }
     ]
   },
   {
@@ -299,8 +436,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "CsMethod", "CsUriStem", "SPort", "CIp", "CsHost", "ScStatus", "TimeTaken", "Result", "Referer"],
     dynamicFilters: [
-      { label: "Host (CsHost)", field: "CsHost", clauseTemplate: (val: string) => `| where CsHost == "${val}"` },
-      { label: "HTTP Method (CsMethod)", field: "CsMethod", clauseTemplate: (val: string) => `| where CsMethod == "${val}"` }
+      { label: "Host (CsHost)", field: "CsHost", clauseTemplate: (val) => formatFilterClause("CsHost", val) },
+      { label: "HTTP Method (CsMethod)", field: "CsMethod", clauseTemplate: (val) => formatFilterClause("CsMethod", val) }
     ]
   },
   {
@@ -316,8 +453,8 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "ResultType", "ResultDescription", "RunbookName_s"],
     dynamicFilters: [
-      { label: "Automation Account Resource", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` },
-      { label: "Runbook Name (RunbookName_s)", field: "RunbookName_s", clauseTemplate: (val: string) => `| where RunbookName_s == "${val}"` }
+      { label: "Automation Account Resource", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "Runbook Name (RunbookName_s)", field: "RunbookName_s", clauseTemplate: (val) => formatFilterClause("RunbookName_s", val) }
     ]
   },
   {
@@ -351,8 +488,8 @@ const PRESETS: PresetQuery[] = [
       "GatewayRegion"
     ],
     dynamicFilters: [
-      { label: "User Name (UserName)", field: "UserName", clauseTemplate: (val: string) => `| where UserName == "${val}"` },
-      { label: "State", field: "State", clauseTemplate: (val: string) => `| where State == "${val}"` }
+      { label: "User Name (UserName)", field: "UserName", clauseTemplate: (val) => formatFilterClause("UserName", val) },
+      { label: "State", field: "State", clauseTemplate: (val) => formatFilterClause("State", val) }
     ]
   },
   {
@@ -365,7 +502,7 @@ const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "DataType", "VolumeGB"],
     dynamicFilters: [
-      { label: "Data Type", field: "DataType", clauseTemplate: (val: string) => `| where DataType == "${val}"` }
+      { label: "Data Type", field: "DataType", clauseTemplate: (val) => formatFilterClause("DataType", val) }
     ]
   },
   {
@@ -397,8 +534,8 @@ const PRESETS: PresetQuery[] = [
       "conditions_destinationIP_s"
     ],
     dynamicFilters: [
-      { label: "Resource Group Name", field: "ResourceGroup", clauseTemplate: (val: string) => `| where ResourceGroup == "${val}"` },
-      { label: "NSG Resource Name", field: "Resource", clauseTemplate: (val: string) => `| where Resource == "${val}"` }
+      { label: "Resource Group Name", field: "ResourceGroup", clauseTemplate: (val) => formatFilterClause("ResourceGroup", val) },
+      { label: "NSG Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) }
     ]
   },
   {
@@ -407,34 +544,37 @@ const PRESETS: PresetQuery[] = [
     baseQuery: 'ACSSMSIncomingOperations\n| order by TimeGenerated desc',
     options: [
       { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
+      { label: "MessageId", clause: '| where MessageId contains ""' },
       { label: "OperationName", clause: '| where OperationName == ""' },
+      { label: "ResultDescription", clause: '| where ResultDescription contains ""' },
       { label: "PhoneNumber", clause: '| where PhoneNumber contains ""' },
+      { label: "PlatformType", clause: '| where PlatformType == ""' },
+      { label: "SdkType", clause: '| where SdkType == ""' },
       { label: "ResultType", clause: '| where ResultType == ""' },
       { label: "CallerIpAddress", clause: '| where CallerIpAddress == ""' },
       { label: "Country", clause: '| where Country == ""' },
       { label: "CorrelationId", clause: '| where CorrelationId == ""' },
-      { label: "SdkType", clause: '| where SdkType == ""' },
-      { label: "PlatformType", clause: '| where PlatformType == ""' },
       { label: "Method", clause: '| where Method == ""' }
     ],
     projectColumns: [
       "TimeGenerated",
+      "MessageId",
       "OperationName",
-      "CorrelationId",
+      "ResultDescription",
+      "PhoneNumber",
+      "PlatformType",
+      "SdkType",
+      "CallerIpAddress",
       "ResultType",
       "ResultSignature",
-      "ResultDescription",
-      "CallerIpAddress",
       "URI",
-      "PhoneNumber",
-      "SdkType",
-      "PlatformType",
+      "CorrelationId",
       "Method",
       "Country"
     ],
     dynamicFilters: [
-      { label: "Operation Name", field: "OperationName", clauseTemplate: (val: string) => `| where OperationName == "${val}"` },
-      { label: "Phone Number", field: "PhoneNumber", clauseTemplate: (val: string) => `| where PhoneNumber == "${val}"` }
+      { label: "Operation Name", field: "OperationName", clauseTemplate: (val) => formatFilterClause("OperationName", val) },
+      { label: "Phone Number", field: "PhoneNumber", clauseTemplate: (val) => formatFilterClause("PhoneNumber", val) }
     ]
   }
 ];
@@ -529,40 +669,1314 @@ function combineWorkspaces(fetched: AzureWorkspace[]): AzureWorkspace[] {
   return Array.from(map.values());
 }
 
-export function App() {
-  const [query, setQuery] = useState(starterQuery);
-  const [timespan, setTimespan] = useState("PT24H");
-  const [maxRows, setMaxRows] = useState<number>(1000);
+interface TabState {
+  id: string;
+  title: string;
+  query: string;
+  timespan: string;
+  maxRows: number;
+  workspaceId: string;
+  result: QueryResponse | null;
+  loading: boolean;
+  error: string | null;
+  activePreset: PresetQuery | null;
+  presetOptions: Set<string>;
+  presetProjectColumns: Set<string>;
+  dynamicFilterValues: Record<string, string[]>;
+  selectedDynamicFilters: Record<string, string[]>;
+  filterSearch: Record<string, string>;
+  optionOperators: Record<string, string>;
+  optionValues: Record<string, string>;
+  customStart: string;
+  customEnd: string;
+  isCustomInputMode: boolean;
+}
 
+function createInitialTab(id: string, title?: string, initialWsId: string = ""): TabState {
+  return {
+    id,
+    title: title || "Query 1",
+    query: starterQuery,
+    timespan: "PT24H",
+    maxRows: 1000,
+    workspaceId: initialWsId,
+    result: null,
+    loading: false,
+    error: null,
+    activePreset: null,
+    presetOptions: new Set(),
+    presetProjectColumns: new Set(),
+    dynamicFilterValues: {},
+    selectedDynamicFilters: {},
+    filterSearch: {},
+    optionOperators: {},
+    optionValues: {},
+    customStart: "",
+    customEnd: "",
+    isCustomInputMode: false
+  };
+}
+
+interface KqlSyntaxError {
+  line: number;
+  message: string;
+}
+
+const VALID_KQL_OPERATORS = new Set([
+  "where", "project", "extend", "summarize", "order", "sort", "take", "limit",
+  "count", "distinct", "render", "top", "join", "lookup", "union", "parse",
+  "evaluate", "mv-expand", "facet", "reduce", "sample", "serialize"
+]);
+
+function validateKql(query: string): KqlSyntaxError[] {
+  const errors: KqlSyntaxError[] = [];
+  const lines = query.split("\n");
+
+  let totalOpenParen = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1;
+    let rawLine = lines[i];
+
+    const commentIdx = rawLine.indexOf("//");
+    if (commentIdx >= 0) {
+      rawLine = rawLine.slice(0, commentIdx);
+    }
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    for (let j = 0; j < rawLine.length; j++) {
+      const char = rawLine[j];
+      if (char === "'" && !inDoubleQuote) inSingleQuote = !inSingleQuote;
+      if (char === '"' && !inSingleQuote) inDoubleQuote = !inDoubleQuote;
+      if (char === "(" && !inSingleQuote && !inDoubleQuote) totalOpenParen++;
+      if (char === ")" && !inSingleQuote && !inDoubleQuote) totalOpenParen--;
+    }
+
+    if (inSingleQuote) {
+      errors.push({ line: lineNum, message: `Unclosed single quote (') on line ${lineNum}` });
+    }
+    if (inDoubleQuote) {
+      errors.push({ line: lineNum, message: `Unclosed double quote (") on line ${lineNum}` });
+    }
+
+    if (trimmed.startsWith("|")) {
+      const pipeContent = trimmed.slice(1).trim();
+      if (!pipeContent) {
+        errors.push({ line: lineNum, message: `Empty pipe operator '|' on line ${lineNum}` });
+      } else {
+        const firstWord = pipeContent.split(/\s+/)[0].toLowerCase();
+        if (!VALID_KQL_OPERATORS.has(firstWord) && !pipeContent.startsWith("//")) {
+          errors.push({ line: lineNum, message: `Unknown KQL operator '${firstWord}' on line ${lineNum}` });
+        }
+        if (firstWord === "where" && pipeContent.split(/\s+/).length === 1) {
+          errors.push({ line: lineNum, message: `'where' clause requires a condition on line ${lineNum}` });
+        }
+        if (firstWord === "project" && pipeContent.split(/\s+/).length === 1) {
+          errors.push({ line: lineNum, message: `'project' clause requires column names on line ${lineNum}` });
+        }
+        if (firstWord === "extend" && pipeContent.split(/\s+/).length === 1) {
+          errors.push({ line: lineNum, message: `'extend' clause requires an assignment on line ${lineNum}` });
+        }
+      }
+    }
+
+    if (trimmed.endsWith("|")) {
+      errors.push({ line: lineNum, message: `Trailing pipe operator '|' on line ${lineNum}` });
+    }
+  }
+
+  if (totalOpenParen > 0) {
+    errors.push({ line: lines.length, message: `Unbalanced parenthesis: Missing closing ')'` });
+  } else if (totalOpenParen < 0) {
+    errors.push({ line: 1, message: `Unbalanced parenthesis: Extra closing ')'` });
+  }
+
+  return errors;
+}
+
+const BASE_KQL_SUGGESTIONS: { label: string; detail: string; type: "command" | "function" | "operator" | "keyword" | "table" }[] = [
+  { label: "where", detail: "Filter rows by predicate condition", type: "command" },
+  { label: "project", detail: "Select columns to include in result", type: "command" },
+  { label: "extend", detail: "Create calculated columns", type: "command" },
+  { label: "summarize", detail: "Aggregate data by group columns", type: "command" },
+  { label: "order by", detail: "Sort rows by column(s)", type: "command" },
+  { label: "sort by", detail: "Sort rows by column(s)", type: "command" },
+  { label: "take 100", detail: "Return first 100 rows", type: "command" },
+  { label: "limit 100", detail: "Limit result to 100 rows", type: "command" },
+  { label: "distinct", detail: "Select distinct values of column", type: "command" },
+  { label: "count()", detail: "Count total row count", type: "function" },
+  { label: "case()", detail: "case(cond1, val1, cond2, val2, defaultVal)", type: "function" },
+  { label: "extract()", detail: "extract(regexPattern, group, stringField)", type: "function" },
+  { label: "tostring()", detail: "Convert expression to string", type: "function" },
+  { label: "split()", detail: "Split string into dynamic array by delimiter", type: "function" },
+  { label: "ago()", detail: "Subtract relative timespan ago(24h)", type: "function" },
+  { label: "between()", detail: "Range check between(val1 .. val2)", type: "operator" },
+  { label: "contains", detail: "Case-insensitive string substring match", type: "operator" },
+  { label: "startswith", detail: "String prefix match", type: "operator" },
+  { label: "endswith", detail: "String suffix match", type: "operator" },
+  { label: "has", detail: "Indexed term / word match", type: "operator" },
+  { label: "and", detail: "Logical AND operator", type: "operator" },
+  { label: "or", detail: "Logical OR operator", type: "operator" },
+  { label: "desc", detail: "Descending sort order", type: "keyword" },
+  { label: "asc", detail: "Ascending sort order", type: "keyword" },
+  { label: "StorageFileLogs", detail: "Azure Storage File shares log table", type: "table" },
+  { label: "StorageBlobLogs", detail: "Azure Storage Blob log table", type: "table" },
+  { label: "AzureDiagnostics", detail: "Azure Diagnostics log table", type: "table" },
+  { label: "KubeEvents", detail: "Kubernetes cluster events table", type: "table" },
+  { label: "AppRequests", detail: "Application Insights requests log", type: "table" },
+  { label: "AppTraces", detail: "Application Insights traces log", type: "table" }
+];
+
+interface KqlCodeEditorProps {
+  query: string;
+  onChange: (newQuery: string) => void;
+  onRun: (e?: number | React.MouseEvent) => void;
+  loading: boolean;
+  isRunDisabled?: boolean;
+  activePreset?: PresetQuery | null;
+  tableColumns?: string[];
+  dynamicFilterValues?: Record<string, string[]>;
+}
+
+function KqlCodeEditor({
+  query,
+  onChange,
+  onRun,
+  loading,
+  isRunDisabled = false,
+  activePreset,
+  tableColumns = [],
+  dynamicFilterValues = {}
+}: KqlCodeEditorProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [cursorPos, setCursorPos] = useState<number>(0);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [searchPrefix, setSearchPrefix] = useState<string>("");
+  const [prefixStart, setPrefixStart] = useState<number>(0);
+
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartPos = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number } | null>(null);
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const currentX = dragOffset?.x ?? 0;
+    const currentY = dragOffset?.y ?? 0;
+    dragStartPos.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startX: currentX,
+      startY: currentY
+    };
+  };
+
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isDragging || !dragStartPos.current) return;
+      const dx = e.clientX - dragStartPos.current.mouseX;
+      const dy = e.clientY - dragStartPos.current.mouseY;
+      setDragOffset({
+        x: dragStartPos.current.startX + dx,
+        y: dragStartPos.current.startY + dy
+      });
+    }
+
+    function handleMouseUp() {
+      setIsDragging(false);
+      dragStartPos.current = null;
+    }
+
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
+  const syntaxErrors = useMemo(() => validateKql(query), [query]);
+
+  const availableColumns = useMemo(() => {
+    const set = new Set<string>();
+
+    // 1. Collect columns strictly belonging to the currently active preset
+    if (activePreset) {
+      if (activePreset.projectColumns) {
+        activePreset.projectColumns.forEach((c) => set.add(c));
+      }
+      if (activePreset.options) {
+        activePreset.options.forEach((opt) => {
+          const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
+          if (fieldMatch) set.add(fieldMatch[1]);
+        });
+      }
+      if (activePreset.dynamicFilters) {
+        activePreset.dynamicFilters.forEach((df) => set.add(df.field));
+      }
+    }
+
+    // 2. Collect from currently active result table
+    tableColumns.forEach((c) => set.add(c));
+
+    // 3. Parse columns from active code in editor (| project, | extend, | summarize)
+    const activeCode = query
+      .split("\n")
+      .map((line) => line.split("//")[0])
+      .join("\n");
+
+    const projectMatches = [...activeCode.matchAll(/\|\s*project\s+([^|]+)/gi)];
+    projectMatches.forEach((m) => {
+      m[1].split(",").forEach((col) => {
+        const name = col.trim().split("=")[0].trim();
+        if (name) set.add(name);
+      });
+    });
+
+    const extendMatches = [...activeCode.matchAll(/\|\s*extend\s+([a-zA-Z0-9_]+)\s*=/gi)];
+    extendMatches.forEach((m) => {
+      if (m[1]) set.add(m[1].trim());
+    });
+
+    const summarizeMatches = [...activeCode.matchAll(/\|\s*summarize\s+([^|]+)/gi)];
+    summarizeMatches.forEach((m) => {
+      const clause = m[1];
+      const bySplit = clause.split(/\bby\b/i);
+      bySplit.forEach((part) => {
+        part.split(",").forEach((col) => {
+          const name = col.trim().split("=")[0].trim();
+          if (name && !name.includes("(")) set.add(name);
+        });
+      });
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [activePreset, tableColumns, query]);
+
+  const allSuggestions = useMemo(() => {
+    const list: { label: string; detail: string; type: "command" | "function" | "operator" | "keyword" | "table" | "column" }[] = [];
+
+    availableColumns.forEach((col) => {
+      list.push({
+        label: col,
+        detail: `Column name (${activePreset?.name || "Query"})`,
+        type: "column"
+      });
+    });
+
+    BASE_KQL_SUGGESTIONS.forEach((item) => list.push(item));
+
+    return list;
+  }, [availableColumns, activePreset]);
+
+  const operatorContextSuggestions = useMemo(() => {
+    const textBeforeCursor = query.slice(0, cursorPos);
+    const opMatch = textBeforeCursor.match(/\|\s*where\s+([a-zA-Z0-9_]+)\s*(==|!=|contains|!contains|between|>|<|>=|<=|has|startswith|endswith|in)\s*([a-zA-Z0-9_"]*)$/i);
+    const targetCol = opMatch ? opMatch[1] : null;
+    const operator = opMatch ? opMatch[2].toLowerCase() : null;
+
+    const list: { label: string; detail: string; type: "command" | "function" | "operator" | "keyword" | "table" | "column" }[] = [];
+
+    // 1. If target column has fetched dynamic values, suggest top distinct values!
+    if (targetCol && dynamicFilterValues && dynamicFilterValues[targetCol]) {
+      dynamicFilterValues[targetCol].slice(0, 15).forEach((val) => {
+        const formattedVal = /^\d+$/.test(val) ? val : `"${val}"`;
+        list.push({
+          label: formattedVal,
+          detail: `Value for ${targetCol}`,
+          type: "keyword"
+        });
+      });
+    }
+
+    // 2. Add Microsoft KQL standard operator value suggestions
+    if (operator === "between") {
+      list.push(
+        { label: "ago(24h) .. ago(1h)", detail: "Time range last 24h to 1h ago", type: "function" },
+        { label: "ago(7d) .. ago(24h)", detail: "Time range 7 days to 24h ago", type: "function" },
+        { label: "400 .. 599", detail: "HTTP Error status range", type: "keyword" },
+        { label: "200 .. 299", detail: "HTTP Success status range", type: "keyword" }
+      );
+    } else {
+      list.push(
+        { label: "ago(15m)", detail: "15 minutes ago relative timestamp", type: "function" },
+        { label: "ago(1h)", detail: "1 hour ago relative timestamp", type: "function" },
+        { label: "ago(24h)", detail: "24 hours ago relative timestamp", type: "function" },
+        { label: "ago(7d)", detail: "7 days ago relative timestamp", type: "function" },
+        { label: "ago(30d)", detail: "30 days ago relative timestamp", type: "function" },
+        { label: "true", detail: "Boolean true", type: "keyword" },
+        { label: "false", detail: "Boolean false", type: "keyword" },
+        { label: "null", detail: "Null value check", type: "keyword" },
+        { label: "tostring()", detail: "Convert expression to string", type: "function" },
+        { label: "toint()", detail: "Convert expression to integer", type: "function" }
+      );
+    }
+
+    return list;
+  }, [query, cursorPos, dynamicFilterValues]);
+
+  const columnContextSuggestions = useMemo(() => {
+    const textBeforeCursor = query.slice(0, cursorPos);
+    const colMatch = textBeforeCursor.match(/(?:\|\s*where|\bwhere)\s+([a-zA-Z0-9_]+)\s*$/i);
+    if (colMatch) {
+      const colName = colMatch[1];
+      return [
+        { label: "==", detail: `Equals condition for ${colName}`, type: "operator" as const },
+        { label: "!=", detail: `Not equals condition for ${colName}`, type: "operator" as const },
+        { label: "contains", detail: `Substring match for ${colName}`, type: "operator" as const },
+        { label: "!contains", detail: `Does not contain match for ${colName}`, type: "operator" as const },
+        { label: ">", detail: `Greater than condition for ${colName}`, type: "operator" as const },
+        { label: "<", detail: `Less than condition for ${colName}`, type: "operator" as const },
+        { label: ">=", detail: `Greater than or equal for ${colName}`, type: "operator" as const },
+        { label: "<=", detail: `Less than or equal for ${colName}`, type: "operator" as const },
+        { label: "between", detail: `Range condition for ${colName}`, type: "operator" as const },
+        { label: "has", detail: `Term match for ${colName}`, type: "operator" as const },
+        { label: "startswith", detail: `Prefix match for ${colName}`, type: "operator" as const },
+        { label: "endswith", detail: `Suffix match for ${colName}`, type: "operator" as const },
+        { label: "in", detail: `In set condition for ${colName}`, type: "operator" as const }
+      ];
+    }
+    return [];
+  }, [query, cursorPos]);
+
+  const matchingSuggestions = useMemo(() => {
+    const combined = [...columnContextSuggestions, ...operatorContextSuggestions, ...allSuggestions];
+    
+    const map = new Map<string, typeof combined[0]>();
+    combined.forEach(item => {
+      if (!map.has(item.label)) {
+        map.set(item.label, item);
+      }
+    });
+    const uniqueList = Array.from(map.values());
+
+    if (!searchPrefix || searchPrefix.length < 1) {
+      return uniqueList.slice(0, 30);
+    }
+    const term = searchPrefix.toLowerCase();
+    return uniqueList.filter((item) => item.label.toLowerCase().includes(term));
+  }, [searchPrefix, allSuggestions, operatorContextSuggestions, columnContextSuggestions]);
+
+  function updatePrefix(newQuery: string, pos: number) {
+    const textBeforeCursor = newQuery.slice(0, pos);
+
+    // 1. Check for typed word or quoted string
+    const match = textBeforeCursor.match(/([a-zA-Z0-9_"]+)$/);
+    if (match) {
+      setSearchPrefix(match[1]);
+      setPrefixStart(pos - match[1].length);
+      setShowSuggestions(true);
+      setSelectedIndex(0);
+      return;
+    }
+
+    // 2. Check for operator followed by spaces e.g. "where Column contains " or "where Column == " or "where Column > "
+    const opMatch = textBeforeCursor.match(/(==|!=|contains|!contains|between|>|<|>=|<=|has|startswith|endswith|in)\s*$/i);
+    if (opMatch) {
+      setSearchPrefix("");
+      setPrefixStart(pos);
+      setShowSuggestions(true);
+      setSelectedIndex(0);
+      return;
+    }
+
+    // 3. Check for column name followed by spaces e.g. "where StatusCode " or "where TimeGenerated "
+    const colSpaceMatch = textBeforeCursor.match(/(?:\|\s*where|\bwhere)\s+([a-zA-Z0-9_]+)\s*$/i);
+    if (colSpaceMatch) {
+      setSearchPrefix("");
+      setPrefixStart(pos);
+      setShowSuggestions(true);
+      setSelectedIndex(0);
+      return;
+    }
+
+    // 4. Check for pipe followed by spaces e.g. "| "
+    const pipeMatch = textBeforeCursor.match(/\|\s*$/);
+    if (pipeMatch) {
+      setSearchPrefix("");
+      setPrefixStart(pos);
+      setShowSuggestions(true);
+      setSelectedIndex(0);
+      return;
+    }
+
+    // 5. Check for 'where ' e.g. "| where "
+    const whereMatch = textBeforeCursor.match(/\bwhere\s+$/i);
+    if (whereMatch) {
+      setSearchPrefix("");
+      setPrefixStart(pos);
+      setShowSuggestions(true);
+      setSelectedIndex(0);
+      return;
+    }
+
+    setShowSuggestions(false);
+  }
+
+  function handleSelectSuggestion(suggestion: { label: string }) {
+    const insertion = suggestion.label;
+    const before = query.slice(0, prefixStart);
+    const after = query.slice(cursorPos);
+    const updated = before + insertion + " " + after;
+    onChange(updated);
+    setShowSuggestions(false);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newPos = prefixStart + insertion.length + 1;
+        textareaRef.current.setSelectionRange(newPos, newPos);
+      }
+    }, 0);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (showSuggestions && matchingSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % matchingSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + matchingSuggestions.length) % matchingSuggestions.length);
+        return;
+      }
+      if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        handleSelectSuggestion(matchingSuggestions[selectedIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setShowSuggestions(false);
+        return;
+      }
+    }
+    if (e.ctrlKey && e.key === " ") {
+      e.preventDefault();
+      const pos = textareaRef.current?.selectionStart || 0;
+      updatePrefix(query, pos);
+      setShowSuggestions(true);
+    }
+  }
+
+  const [editorSize, setEditorSize] = useState<"normal" | "minimized" | "expanded">("normal");
+  const lines = query.split("\n");
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 12px",
+        background: syntaxErrors.length > 0 ? "rgba(35, 10, 18, 0.95)" : "rgba(4, 23, 32, 0.95)",
+        border: `1px solid ${syntaxErrors.length > 0 ? "rgba(244, 63, 94, 0.5)" : "rgba(45, 212, 191, 0.28)"}`,
+        borderBottom: editorSize === "minimized" ? undefined : "none",
+        borderTopLeftRadius: "8px",
+        borderTopRightRadius: "8px",
+        borderBottomLeftRadius: editorSize === "minimized" ? "8px" : 0,
+        borderBottomRightRadius: editorSize === "minimized" ? "8px" : 0,
+        fontSize: "12px",
+        color: "#94a3b8"
+      }}>
+        <span style={{ fontWeight: 700, color: syntaxErrors.length > 0 ? "#fda4af" : "#38bdf8", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>KQL Code Editor</span>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>({lines.length} lines)</span>
+          {syntaxErrors.length > 0 && (
+            <span style={{ color: "#f43f5e", fontSize: "11px", fontWeight: 700, background: "rgba(244,63,94,0.15)", padding: "2px 6px", borderRadius: "4px" }}>
+              ⚠️ {syntaxErrors.length} Syntax {syntaxErrors.length === 1 ? "Error" : "Errors"}
+            </span>
+          )}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={() => setEditorSize(editorSize === "minimized" ? "normal" : "minimized")}
+            style={{
+              background: editorSize === "minimized" ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
+              border: `1px solid ${editorSize === "minimized" ? "#10b981" : "rgba(56, 189, 248, 0.3)"}`,
+              color: editorSize === "minimized" ? "#34d399" : "#94a3b8",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              fontSize: "11px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+            title={editorSize === "minimized" ? "Expand KQL Editor" : "Minimize KQL Editor"}
+          >
+            {editorSize === "minimized" ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            <span>{editorSize === "minimized" ? "Expand" : "Minimize"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditorSize(editorSize === "expanded" ? "normal" : "expanded")}
+            style={{
+              background: editorSize === "expanded" ? "rgba(56, 189, 248, 0.2)" : "rgba(15, 23, 42, 0.6)",
+              border: `1px solid ${editorSize === "expanded" ? "#38bdf8" : "rgba(56, 189, 248, 0.3)"}`,
+              color: editorSize === "expanded" ? "#38bdf8" : "#94a3b8",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              fontSize: "11px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+            title={editorSize === "expanded" ? "Standard Height" : "Full Height Editor"}
+          >
+            <span>{editorSize === "expanded" ? "Standard Height" : "Full Height"}</span>
+          </button>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>💡 Type for suggestions or Ctrl+Space</span>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={onRun}
+            disabled={loading || isRunDisabled}
+            title={isRunDisabled ? "Please select at least 1 Dynamic Filter option to run query" : "Run Query"}
+            style={{
+              fontSize: "12px",
+              fontWeight: 700,
+              padding: "4px 12px",
+              height: "28px",
+              minWidth: "max-content",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: isRunDisabled ? "rgba(71, 85, 105, 0.4)" : undefined,
+              color: isRunDisabled ? "#94a3b8" : undefined,
+              borderColor: isRunDisabled ? "rgba(148, 163, 184, 0.3)" : undefined,
+              cursor: isRunDisabled ? "not-allowed" : "pointer",
+              opacity: isRunDisabled ? 0.6 : 1
+            }}
+          >
+            <Play size={14} />
+            <span>{loading ? "Running..." : "Run Query"}</span>
+          </button>
+        </div>
+      </div>
+
+      {editorSize === "minimized" ? (
+        <div
+          onClick={() => setEditorSize("normal")}
+          style={{
+            padding: "10px 14px",
+            background: "rgba(4, 20, 28, 0.95)",
+            border: "1px solid rgba(45, 212, 191, 0.3)",
+            borderBottomLeftRadius: "8px",
+            borderBottomRightRadius: "8px",
+            fontSize: "12px",
+            color: "#94a3b8",
+            fontFamily: "monospace",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+          title="Click to expand editor"
+        >
+          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ color: "#34d399", fontWeight: 700 }}>Minimized Editor: </span>
+            <span>{query.replace(/\n/g, " | ")}</span>
+          </div>
+          <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: 600, marginLeft: "12px", flexShrink: 0 }}>
+            Click to expand ▾
+          </span>
+        </div>
+      ) : (
+        <div style={{ position: "relative" }}>
+          <textarea
+            ref={textareaRef}
+            className="query-editor"
+            style={{
+              borderTopLeftRadius: 0,
+              borderTopRightRadius: 0,
+              borderColor: syntaxErrors.length > 0 ? "rgba(244, 63, 94, 0.5)" : undefined,
+              boxShadow: syntaxErrors.length > 0 ? "0 0 10px rgba(244, 63, 94, 0.2)" : undefined,
+              height: editorSize === "expanded" ? "420px" : "140px"
+            }}
+            value={query}
+            onChange={(e) => {
+              const val = e.target.value;
+              const pos = e.target.selectionStart;
+              setCursorPos(pos);
+              onChange(val);
+              updatePrefix(val, pos);
+            }}
+            onClick={(e) => {
+              const pos = (e.target as HTMLTextAreaElement).selectionStart;
+              setCursorPos(pos);
+              updatePrefix(query, pos);
+            }}
+            onKeyUp={(e) => {
+              if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+                const pos = (e.target as HTMLTextAreaElement).selectionStart;
+                setCursorPos(pos);
+                updatePrefix(query, pos);
+              }
+            }}
+            onKeyDown={handleKeyDown}
+            spellCheck={false}
+            placeholder="Enter KQL query here..."
+          />
+
+          {showSuggestions && matchingSuggestions.length > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: dragOffset ? undefined : "10px",
+                right: dragOffset ? undefined : "16px",
+                transform: dragOffset ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
+                width: "360px",
+                maxWidth: "calc(100% - 32px)",
+                maxHeight: "260px",
+                background: "rgba(4, 20, 28, 0.98)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(16, 185, 129, 0.6)",
+                borderRadius: "8px",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
+                zIndex: 3000,
+                padding: "4px",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column"
+              }}
+            >
+            <div
+              onMouseDown={handleHeaderMouseDown}
+              style={{
+                padding: "6px 10px",
+                fontSize: "11px",
+                color: "#34d399",
+                background: "rgba(16, 185, 129, 0.2)",
+                borderBottom: "1px solid rgba(16, 185, 129, 0.3)",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: isDragging ? "grabbing" : "grab",
+                userSelect: "none"
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>⋮⋮ KQL Suggestions ({matchingSuggestions.length})</span>
+                <span style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 400 }}>(Drag to move anywhere)</span>
+              </span>
+              <span style={{ fontSize: "10px", color: "#94a3b8" }}>Tab / Enter to select</span>
+            </div>
+            <div style={{ maxHeight: "200px", overflowY: "auto", padding: "4px" }}>
+              {matchingSuggestions.map((item, idx) => {
+                const isSelected = idx === selectedIndex;
+                const typeIcon =
+                  item.type === "column" ? "📊" :
+                  item.type === "command" ? "🔑" :
+                  item.type === "function" ? "⚡" :
+                  item.type === "table" ? "📋" : "⚙️";
+
+                const typeColor =
+                  item.type === "column" ? "#34d399" :
+                  item.type === "command" ? "#38bdf8" :
+                  item.type === "function" ? "#fbbf24" :
+                  item.type === "table" ? "#a78bfa" : "#94a3b8";
+
+                return (
+                  <div
+                    key={`${item.label}-${idx}`}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: "4px",
+                      background: isSelected ? "rgba(16, 185, 129, 0.25)" : "transparent",
+                      color: isSelected ? "#ffffff" : "#f8fafc",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      fontSize: "12px",
+                      margin: "2px 0"
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectSuggestion(item);
+                    }}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+                      <span style={{ fontSize: "12px" }}>{typeIcon}</span>
+                      <span style={{ fontWeight: 700, color: typeColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {item.label}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "10px", color: "#94a3b8", marginLeft: "10px", whiteSpace: "nowrap" }}>
+                      {item.detail}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {syntaxErrors.length > 0 && (
+        <div style={{
+          marginTop: "6px",
+          padding: "8px 12px",
+          background: "rgba(244, 63, 94, 0.12)",
+          border: "1px solid rgba(244, 63, 94, 0.4)",
+          borderRadius: "6px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px"
+        }}>
+          {syntaxErrors.map((err, idx) => (
+            <div key={idx} style={{ fontSize: "12px", color: "#fecdd3", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ color: "#f43f5e", fontWeight: 700, minWidth: "max-content" }}>⚠️ Line {err.line}:</span>
+              <span>{err.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GraphicalWorkspaceSelect({
+  workspaces,
+  workspaceId,
+  onSelect,
+  onManualClick
+}: {
+  workspaces: AzureWorkspace[];
+  workspaceId: string;
+  onSelect: (id: string) => void;
+  onManualClick: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedWs = workspaces.find((w) => w.customerId === workspaceId);
+
+  const filteredWorkspaces = useMemo(() => {
+    if (!search.trim()) return workspaces;
+    const term = search.toLowerCase();
+    return workspaces.filter(
+      (w) => w.name.toLowerCase().includes(term) || w.customerId.toLowerCase().includes(term)
+    );
+  }, [workspaces, search]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: "100%",
+          padding: "8px 12px",
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          border: `1px solid ${isOpen ? "#34d399" : "rgba(45, 212, 191, 0.35)"}`,
+          borderRadius: "8px",
+          color: selectedWs ? "#34d399" : "#94a3b8",
+          fontSize: "13px",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          boxShadow: isOpen ? "0 0 15px rgba(52, 211, 153, 0.25)" : "none",
+          transition: "all 0.2s ease"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+          <span style={{ fontSize: "14px" }}>🏢</span>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
+            {selectedWs ? `${selectedWs.name} (${selectedWs.customerId.slice(0, 8)}...)` : `-- Select a Workspace (${workspaces.length}) --`}
+          </span>
+        </div>
+        <ChevronDown size={14} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            background: "rgba(4, 18, 27, 0.96)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            border: "1px solid rgba(52, 211, 153, 0.4)",
+            borderRadius: "10px",
+            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.85), 0 0 20px rgba(52, 211, 153, 0.15)",
+            padding: "8px",
+            maxHeight: "300px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px"
+          }}
+        >
+          {workspaces.length > 5 && (
+            <div style={{ padding: "2px 4px" }}>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Search workspaces..."
+                style={{
+                  width: "100%",
+                  padding: "6px 10px",
+                  fontSize: "12px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                  borderRadius: "6px",
+                  color: "#f8fafc",
+                  outline: "none"
+                }}
+              />
+            </div>
+          )}
+
+          <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {filteredWorkspaces.map((ws) => {
+              const isSelected = ws.customerId === workspaceId;
+              return (
+                <div
+                  key={ws.customerId}
+                  onClick={() => {
+                    onSelect(ws.customerId);
+                    setIsOpen(false);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "6px",
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(56, 189, 248, 0.15))"
+                      : "rgba(15, 23, 42, 0.4)",
+                    border: `1px solid ${isSelected ? "rgba(52, 211, 153, 0.6)" : "transparent"}`,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#34d399" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      🏢 {ws.name}
+                    </span>
+                    <span style={{ fontSize: "10px", color: "#64748b", fontFamily: "monospace" }}>
+                      {ws.customerId}
+                    </span>
+                  </div>
+                  {isSelected && (
+                    <span style={{ fontSize: "11px", color: "#34d399", fontWeight: 700, background: "rgba(16,185,129,0.2)", padding: "2px 6px", borderRadius: "4px", flexShrink: 0 }}>
+                      ✓ Selected
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            <div
+              onClick={() => {
+                onManualClick();
+                setIsOpen(false);
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: "6px",
+                background: "rgba(56, 189, 248, 0.1)",
+                border: "1px dashed rgba(56, 189, 248, 0.4)",
+                cursor: "pointer",
+                fontSize: "12px",
+                color: "#38bdf8",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              <span>✏️</span>
+              <span>Enter Custom Workspace ID Manually...</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getPresetTable(preset: PresetQuery): string {
+  const line = preset.baseQuery.split("\n")[0].trim();
+  return line.split("|")[0].trim() || "LogTable";
+}
+
+function getPresetDesc(preset: PresetQuery): string {
+  return `${preset.projectColumns.length} projected columns · ${preset.options.length} filter options`;
+}
+
+function GraphicalPresetSelect({
+  presets,
+  activePreset,
+  presetColors,
+  onSelect
+}: {
+  presets: PresetQuery[];
+  activePreset: PresetQuery | null;
+  presetColors: Record<string, { bg: string; text: string }>;
+  onSelect: (preset: PresetQuery) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredPresets = useMemo(() => {
+    if (!search.trim()) return presets;
+    const term = search.toLowerCase();
+    return presets.filter(
+      (p) => p.name.toLowerCase().includes(term) || getPresetTable(p).toLowerCase().includes(term)
+    );
+  }, [presets, search]);
+
+  const activeColor = activePreset ? presetColors[activePreset.id]?.bg || "#38bdf8" : "#38bdf8";
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: "100%",
+          padding: "8px 12px",
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          border: `1px solid ${isOpen ? activeColor : "rgba(45, 212, 191, 0.35)"}`,
+          borderRadius: "8px",
+          color: activePreset ? "#f8fafc" : "#94a3b8",
+          fontSize: "13px",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          boxShadow: isOpen ? `0 0 15px ${activeColor}44` : "none",
+          transition: "all 0.2s ease"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+          <span style={{ fontSize: "14px" }}>⚡</span>
+          {activePreset ? (
+            <span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", fontWeight: 800, backgroundColor: activeColor, color: presetColors[activePreset.id]?.text || "#fff", flexShrink: 0 }}>
+              {getPresetTable(activePreset)}
+            </span>
+          ) : null}
+          <span style={{ fontWeight: 700, color: activePreset ? "#f8fafc" : "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {activePreset ? activePreset.name : `-- Select a Log Preset (${presets.length}) --`}
+          </span>
+        </div>
+        <ChevronDown size={14} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            background: "rgba(4, 18, 27, 0.96)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            border: "1px solid rgba(56, 189, 248, 0.4)",
+            borderRadius: "10px",
+            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.15)",
+            padding: "8px",
+            maxHeight: "340px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px"
+          }}
+        >
+          <div style={{ padding: "2px 4px" }}>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Search preset name, table, or category..."
+              style={{
+                width: "100%",
+                padding: "7px 10px",
+                fontSize: "12px",
+                background: "rgba(15, 23, 42, 0.6)",
+                border: "1px solid rgba(56, 189, 248, 0.3)",
+                borderRadius: "6px",
+                color: "#f8fafc",
+                outline: "none"
+              }}
+            />
+          </div>
+
+          <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {filteredPresets.map((preset) => {
+              const isSelected = activePreset?.id === preset.id;
+              const colorInfo = presetColors[preset.id] || { bg: "#38bdf8", text: "#ffffff" };
+              const tableName = getPresetTable(preset);
+              const desc = getPresetDesc(preset);
+
+              return (
+                <div
+                  key={preset.id}
+                  onClick={() => {
+                    onSelect(preset);
+                    setIsOpen(false);
+                  }}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: "8px",
+                    background: isSelected
+                      ? `linear-gradient(135deg, ${colorInfo.bg}33, rgba(15, 23, 42, 0.8))`
+                      : "rgba(15, 23, 42, 0.4)",
+                    border: `1px solid ${isSelected ? colorInfo.bg : "rgba(45, 212, 191, 0.15)"}`,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    transition: "all 0.15s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = colorInfo.bg;
+                      e.currentTarget.style.background = "rgba(15, 23, 42, 0.75)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = "rgba(45, 212, 191, 0.15)";
+                      e.currentTarget.style.background = "rgba(15, 23, 42, 0.4)";
+                    }
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
+                    <span
+                      style={{
+                        padding: "3px 7px",
+                        borderRadius: "4px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        backgroundColor: colorInfo.bg,
+                        color: colorInfo.text,
+                        whiteSpace: "nowrap",
+                        flexShrink: 0
+                      }}
+                    >
+                      {tableName}
+                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {preset.name}
+                      </span>
+                      <span style={{ fontSize: "10px", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {desc}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <span style={{ fontSize: "11px", color: colorInfo.bg, fontWeight: 700, background: `${colorInfo.bg}22`, padding: "3px 8px", borderRadius: "4px", flexShrink: 0 }}>
+                      ✓ Active
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function App() {
   const sortedPresets = useMemo(() => {
     return [...PRESETS].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }, []);
-  const [workspaceId, setWorkspaceId] = useState(() => {
+
+  const [tabs, setTabs] = useState<TabState[]>(() => {
     const initial = getPredefinedWorkspaces();
-    return initial.length > 0 ? initial[0].customerId : "";
+    const defaultWs = initial.length > 0 ? initial[0].customerId : "";
+    return [createInitialTab("tab-1", "Query 1", defaultWs)];
   });
-  const [result, setResult] = useState<QueryResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activePreset, setActivePreset] = useState<PresetQuery | null>(null);
-  const [presetOptions, setPresetOptions] = useState<Set<string>>(new Set());
-  const [presetProjectColumns, setPresetProjectColumns] = useState<Set<string>>(new Set());
-  const [dynamicFilterValues, setDynamicFilterValues] = useState<Record<string, string[]>>({});
-  const [selectedDynamicFilters, setSelectedDynamicFilters] = useState<Record<string, string>>({});
-  const [filterSearch, setFilterSearch] = useState<Record<string, string>>({});
-  const [optionOperators, setOptionOperators] = useState<Record<string, string>>({});
-  const [optionValues, setOptionValues] = useState<Record<string, string>>({});
+  const [activeTabId, setActiveTabId] = useState<string>("tab-1");
+
+  const activeTab = useMemo(() => {
+    return tabs.find((t) => t.id === activeTabId) || tabs[0];
+  }, [tabs, activeTabId]);
+
+  function updateActiveTab(updater: Partial<TabState> | ((prev: TabState) => Partial<TabState>)) {
+    setTabs((prevTabs) =>
+      prevTabs.map((t) => {
+        if (t.id === activeTabId) {
+          const changes = typeof updater === "function" ? updater(t) : updater;
+          return { ...t, ...changes };
+        }
+        return t;
+      })
+    );
+  }
+
+  function createNewTab() {
+    const newId = `tab-${Date.now()}`;
+    const newNum = tabs.length + 1;
+    const initialWs = activeTab ? activeTab.workspaceId : "";
+    const newTab = createInitialTab(newId, `Query ${newNum}`, initialWs);
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newId);
+  }
+
+  function closeTab(tabId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (tabs.length <= 1) return;
+    const nextTabs = tabs.filter((t) => t.id !== tabId);
+    setTabs(nextTabs);
+    if (activeTabId === tabId) {
+      setActiveTabId(nextTabs[nextTabs.length - 1].id);
+    }
+  }
+
+  const {
+    query,
+    timespan,
+    maxRows,
+    workspaceId,
+    result,
+    loading,
+    error,
+    activePreset,
+    presetOptions,
+    presetProjectColumns,
+    dynamicFilterValues,
+    selectedDynamicFilters,
+    filterSearch,
+    optionOperators,
+    optionValues,
+    customStart,
+    customEnd,
+    isCustomInputMode
+  } = activeTab;
+
+  function setQuery(q: string | ((prev: string) => string)) {
+    updateActiveTab((t) => ({ query: typeof q === "function" ? q(t.query) : q }));
+  }
+  function setTimespan(ts: string) {
+    updateActiveTab({ timespan: ts });
+  }
+  function setMaxRows(rows: number) {
+    updateActiveTab({ maxRows: rows });
+  }
+  function setWorkspaceId(wsId: string) {
+    updateActiveTab({ workspaceId: wsId });
+  }
+  function setResult(res: QueryResponse | null) {
+    updateActiveTab({ result: res });
+  }
+  function setLoading(load: boolean) {
+    updateActiveTab({ loading: load });
+  }
+  function setError(err: string | null) {
+    updateActiveTab({ error: err });
+  }
+  function setActivePreset(preset: PresetQuery | null) {
+    updateActiveTab({ activePreset: preset, title: preset ? preset.name : activeTab.title });
+  }
+  function setPresetOptions(opts: Set<string> | ((prev: Set<string>) => Set<string>)) {
+    updateActiveTab((t) => ({ presetOptions: typeof opts === "function" ? opts(t.presetOptions) : opts }));
+  }
+  function setPresetProjectColumns(cols: Set<string> | ((prev: Set<string>) => Set<string>)) {
+    updateActiveTab((t) => ({ presetProjectColumns: typeof cols === "function" ? cols(t.presetProjectColumns) : cols }));
+  }
+  function setDynamicFilterValues(vals: Record<string, string[]> | ((prev: Record<string, string[]>) => Record<string, string[]>)) {
+    updateActiveTab((t) => ({ dynamicFilterValues: typeof vals === "function" ? vals(t.dynamicFilterValues) : vals }));
+  }
+  function setSelectedDynamicFilters(filters: Record<string, string[]> | ((prev: Record<string, string[]>) => Record<string, string[]>)) {
+    updateActiveTab((t) => ({ selectedDynamicFilters: typeof filters === "function" ? filters(t.selectedDynamicFilters) : filters }));
+  }
+  function setFilterSearch(search: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) {
+    updateActiveTab((t) => ({ filterSearch: typeof search === "function" ? search(t.filterSearch) : search }));
+  }
+  function setOptionOperators(ops: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) {
+    updateActiveTab((t) => ({ optionOperators: typeof ops === "function" ? ops(t.optionOperators) : ops }));
+  }
+  function setOptionValues(vals: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) {
+    updateActiveTab((t) => ({ optionValues: typeof vals === "function" ? vals(t.optionValues) : vals }));
+  }
+  function setCustomStart(cs: string) {
+    updateActiveTab({ customStart: cs });
+  }
+  function setCustomEnd(ce: string) {
+    updateActiveTab({ customEnd: ce });
+  }
+  function setIsCustomInputMode(mode: boolean | ((prev: boolean) => boolean)) {
+    updateActiveTab((t) => ({ isCustomInputMode: typeof mode === "function" ? mode(t.isCustomInputMode) : mode }));
+  }
+
   const [hoveredCondition, setHoveredCondition] = useState<PresetOption | null>(null);
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<"conditions" | "columns" | null>(null);
+  const [openDynamicField, setOpenDynamicField] = useState<string | null>(null);
+  const dropdownContainerRef = useRef<HTMLDivElement | null>(null);
+  const dynamicFieldsRef = useRef<HTMLDivElement | null>(null);
   const [dropdownSearch, setDropdownSearch] = useState("");
-  const [isQueryEditorCollapsed, setIsQueryEditorCollapsed] = useState(false);
+  
+  const totalActiveDynamicFilters = useMemo(() => {
+    return Object.values(selectedDynamicFilters).reduce((acc, list) => acc + (list ? list.length : 0), 0);
+  }, [selectedDynamicFilters]);
+
+  const isRunDisabled = useMemo(() => {
+    if (!activePreset || !activePreset.dynamicFilters || activePreset.dynamicFilters.length === 0) {
+      return false;
+    }
+    return totalActiveDynamicFilters === 0;
+  }, [activePreset, totalActiveDynamicFilters]);
   const [healthStatus, setHealthStatus] = useState<BackendHealthResponse | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
-
-  const dropdownContainerRef = useRef<HTMLDivElement | null>(null);
 
   const refreshBackendHealth = async () => {
     setCheckingHealth(true);
@@ -576,14 +1990,31 @@ export function App() {
     refreshBackendHealth();
   }, []);
 
+  const activeDynamicFieldRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    function handlePointerDown(e: MouseEvent) {
-      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target as Node)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(event.target as Node)) {
         setOpenDropdown(null);
       }
+      if (activeDynamicFieldRef.current && !activeDynamicFieldRef.current.contains(event.target as Node)) {
+        setOpenDynamicField(null);
+      }
     }
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpenDropdown(null);
+        setOpenDynamicField(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   function togglePresetOption(opt: PresetOption) {
@@ -633,7 +2064,6 @@ export function App() {
   const isAuthenticated = useIsAuthenticated();
   const [workspaces, setWorkspaces] = useState<AzureWorkspace[]>(() => getPredefinedWorkspaces());
   const [fetchingWorkspaces, setFetchingWorkspaces] = useState(false);
-  const [isCustomInputMode, setIsCustomInputMode] = useState(false);
 
   async function loadWorkspaces() {
     if (!isAuthenticated || accounts.length === 0) return;
@@ -705,6 +2135,26 @@ export function App() {
 
   const authRequired = getEnv("VITE_REQUIRE_AZURE_AD_AUTH") === "true";
 
+  const allowedGroupsConfig = getEnv("VITE_ALLOWED_AZURE_AD_GROUPS").trim();
+  const allowedGroupsList = useMemo(() => {
+    return allowedGroupsConfig
+      ? allowedGroupsConfig.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean)
+      : [];
+  }, [allowedGroupsConfig]);
+
+  const userGroups: string[] = useMemo(() => {
+    if (!isAuthenticated || accounts.length === 0) return [];
+    const claims = (accounts[0]?.idTokenClaims || {}) as Record<string, any>;
+    const groups = claims.groups || claims.roles || claims.wids || [];
+    return Array.isArray(groups) ? groups.map((g: any) => String(g).toLowerCase()) : [];
+  }, [isAuthenticated, accounts]);
+
+  const isGroupAuthorized = useMemo(() => {
+    if (allowedGroupsList.length === 0) return true; // Allow all AD users if no group restriction configured
+    if (!isAuthenticated || accounts.length === 0) return false;
+    return userGroups.some((g) => allowedGroupsList.includes(g));
+  }, [allowedGroupsList, isAuthenticated, accounts, userGroups]);
+
   // Require Azure AD login first before accessing the query workspace (unless disabled via VITE_REQUIRE_AZURE_AD_AUTH=false)
   if (authRequired && !isAuthenticated) {
     return (
@@ -759,6 +2209,59 @@ export function App() {
           <div className="feature-card">
             <h3>🤖 AI Query Assistant</h3>
             <p>Generate, optimize, and debug complex KQL queries using the built-in AI Assistant.</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Access Denied Screen if user is authenticated but not in any configured AD group
+  if (isAuthenticated && !isGroupAuthorized) {
+    const userUpn = accounts[0]?.username || accounts[0]?.name || "Authenticated User";
+    return (
+      <main className="login-landing">
+        <div className="login-hero-card" style={{ border: "1px solid rgba(244, 63, 94, 0.45)" }}>
+          <div className="login-brand-icon" style={{ background: "rgba(244, 63, 94, 0.2)", borderColor: "#f43f5e", color: "#f43f5e" }}>
+            <ShieldCheck size={36} />
+          </div>
+          <h2 style={{ fontSize: "26px", fontWeight: "800", color: "#fda4af", marginBottom: "12px" }}>
+            🚫 Access Denied: Azure AD Group Restriction
+          </h2>
+          <p style={{ fontSize: "15px", color: "#fecdd3", marginBottom: "20px", lineHeight: "1.6" }}>
+            Signed in as <strong>{userUpn}</strong>. Your account authenticated successfully with Microsoft Entra ID, but you are not a member of an authorized Azure AD Security Group required to access this application.
+          </p>
+
+          <div style={{
+            background: "rgba(4, 20, 28, 0.85)",
+            border: "1px solid rgba(244, 63, 94, 0.3)",
+            borderRadius: "8px",
+            padding: "16px",
+            textAlign: "left",
+            marginBottom: "24px",
+            fontSize: "13px"
+          }}>
+            <div style={{ fontWeight: 700, color: "#f43f5e", marginBottom: "6px" }}>Security Authorization Details:</div>
+            <div style={{ color: "#94a3b8", marginBottom: "8px" }}>
+              Authorized AD Groups: <code style={{ color: "#34d399" }}>{allowedGroupsConfig}</code>
+            </div>
+            <div style={{ color: "#94a3b8" }}>
+              Your Group Memberships: <code style={{ color: userGroups.length > 0 ? "#38bdf8" : "#f43f5e" }}>{userGroups.length > 0 ? userGroups.join(", ") : "None emitted (Group claims missing)"}</code>
+            </div>
+          </div>
+
+          <div style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "24px", textAlign: "left", background: "rgba(255, 255, 255, 0.03)", padding: "12px", borderRadius: "6px" }}>
+            💡 <strong>Troubleshooting:</strong>
+            <ul style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: "1.6" }}>
+              <li>Ask your Azure AD administrator to assign your account to an authorized Security Group.</li>
+              <li>Ensure <code>groupMembershipClaims</code> (SecurityGroup / All) is enabled in your Azure AD App Registration manifest.</li>
+            </ul>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+            <button className="login-btn-primary" style={{ background: "linear-gradient(90deg, #f43f5e 0%, #e11d48 100%)" }} onClick={handleLogout}>
+              <LogOut size={20} />
+              <span>Sign Out / Switch Account</span>
+            </button>
           </div>
         </div>
       </main>
@@ -852,7 +2355,7 @@ export function App() {
     preset: PresetQuery,
     conditionOptions: Set<string>,
     projectCols: Set<string>,
-    dynamicVals: Record<string, string>,
+    dynamicVals: Record<string, string[]>,
     ops: Record<string, string> = optionOperators,
     vals: Record<string, string> = optionValues
   ) {
@@ -861,7 +2364,11 @@ export function App() {
 
     const dynamicClauses =
       preset.dynamicFilters
-        ?.map((f) => (dynamicVals[f.field] ? f.clauseTemplate(dynamicVals[f.field]) : null))
+        ?.map((f) => {
+          const selected = dynamicVals[f.field];
+          if (!selected || selected.length === 0) return null;
+          return f.clauseTemplate(selected);
+        })
         .filter(Boolean) || [];
 
     const conditionClauses = preset.options
@@ -881,7 +2388,7 @@ export function App() {
   async function fetchDynamicFilters(
     preset: PresetQuery,
     targetWorkspaceId?: string,
-    currentSelectedFilters: Record<string, string> = selectedDynamicFilters
+    currentSelectedFilters: Record<string, string[]> = selectedDynamicFilters
   ) {
     if (!preset.dynamicFilters || preset.dynamicFilters.length === 0) return;
     
@@ -919,7 +2426,7 @@ export function App() {
         for (let j = 0; j < i; j++) {
           const prevFilter = preset.dynamicFilters[j];
           const selectedVal = currentSelectedFilters[prevFilter.field];
-          if (selectedVal) {
+          if (selectedVal && selectedVal.length > 0) {
             q += `\n${prevFilter.clauseTemplate(selectedVal)}`;
           }
         }
@@ -941,7 +2448,7 @@ export function App() {
           for (let j = 0; j < i; j++) {
             const prevFilter = preset.dynamicFilters[j];
             const selectedVal = currentSelectedFilters[prevFilter.field];
-            if (selectedVal) {
+            if (selectedVal && selectedVal.length > 0) {
               fallbackQ += `\n${prevFilter.clauseTemplate(selectedVal)}`;
             }
           }
@@ -974,6 +2481,7 @@ export function App() {
     setPresetProjectColumns(initialProjects);
     setSelectedDynamicFilters({});
     setFilterSearch({});
+    setOpenDynamicField(null);
     setQuery(generateQuery(preset, new Set(), initialProjects, {}, {}, {}));
     fetchDynamicFilters(preset, workspaceId, {});
   }
@@ -985,8 +2493,29 @@ export function App() {
     }
   }
 
-  function handleDynamicFilterChange(field: string, value: string) {
-    const nextFilters = { ...selectedDynamicFilters, [field]: value };
+  function toggleDynamicFilterValue(field: string, val: string) {
+    const current = selectedDynamicFilters[field] || [];
+    const exists = current.includes(val);
+    const updated = exists ? current.filter((v) => v !== val) : [...current, val];
+    const nextFilters = { ...selectedDynamicFilters, [field]: updated };
+    setSelectedDynamicFilters(nextFilters);
+    if (activePreset) {
+      setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
+      fetchDynamicFilters(activePreset, workspaceId, nextFilters);
+    }
+  }
+
+  function selectAllDynamicFilterValues(field: string, values: string[]) {
+    const nextFilters = { ...selectedDynamicFilters, [field]: [...values] };
+    setSelectedDynamicFilters(nextFilters);
+    if (activePreset) {
+      setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
+      fetchDynamicFilters(activePreset, workspaceId, nextFilters);
+    }
+  }
+
+  function clearDynamicFilterValues(field: string) {
+    const nextFilters = { ...selectedDynamicFilters, [field]: [] };
     setSelectedDynamicFilters(nextFilters);
     if (activePreset) {
       setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
@@ -1007,11 +2536,16 @@ export function App() {
     }
   }
 
-  async function handleRun() {
+  async function handleRun(overrideMaxRows?: number | React.MouseEvent) {
+    const targetMaxRows = typeof overrideMaxRows === "number" ? overrideMaxRows : maxRows;
     setError(null);
+    if (!isGroupAuthorized) {
+      setError("Access Denied: Your Azure AD account is not a member of an authorized AD Security Group.");
+      setLoading(false);
+      return;
+    }
     setHealthStatus((prev) => (prev && !prev.ok ? null : prev));
     setLoading(true);
-    setIsQueryEditorCollapsed(true);
     try {
       let finalTimespan = timespan;
       if (timespan === "CUSTOM") {
@@ -1037,12 +2571,35 @@ export function App() {
         }
       }
 
+      // Sync presetProjectColumns if user typed a custom | project clause in editor
+      const activeCode = query
+        .split("\n")
+        .map((line) => {
+          const commentIdx = line.indexOf("//");
+          return commentIdx >= 0 ? line.slice(0, commentIdx) : line;
+        })
+        .join("\n");
+      const projectMatches = [...activeCode.matchAll(/\|\s*project\s+([^|]+)/gi)];
+      if (projectMatches.length > 0) {
+        const lastProjectClause = projectMatches[projectMatches.length - 1][1].trim();
+        const projectedNames = lastProjectClause
+          .split(",")
+          .map((item) => {
+            const parts = item.trim().split("=");
+            return parts[0].trim();
+          })
+          .filter(Boolean);
+        if (projectedNames.length > 0) {
+          setPresetProjectColumns(new Set(projectedNames));
+        }
+      }
+
       const response = await runQuery({
         query,
         timespan: finalTimespan,
         workspaceId: workspaceId.trim() || undefined,
         filters: [],
-        maxRows,
+        maxRows: targetMaxRows,
         token
       });
       setResult(response);
@@ -1101,43 +2658,47 @@ export function App() {
       </section>
 
       <section className="workspace">
+        <div className="tab-bar-container">
+          <div className="tab-bar-list">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  className={`query-tab ${isActive ? "active" : ""}`}
+                  onClick={() => setActiveTabId(tab.id)}
+                >
+                  <span className="tab-icon">⚡</span>
+                  <span className="tab-title" title={tab.title}>{tab.title}</span>
+                  {tabs.length > 1 && (
+                    <button
+                      type="button"
+                      className="tab-close-btn"
+                      onClick={(e) => closeTab(tab.id, e)}
+                      title="Close Tab"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="add-tab-btn"
+            onClick={createNewTab}
+            title="Open New Query Tab"
+          >
+            <Plus size={15} />
+            <span>New Tab</span>
+          </button>
+        </div>
+
         <div className="query-panel">
           <div className="panel-header">
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <h2 style={{ color: "#38bdf8" }}>KQL Query</h2>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => setIsQueryEditorCollapsed(!isQueryEditorCollapsed)}
-                title={isQueryEditorCollapsed ? "Expand Query Editor" : "Minimize Query Editor"}
-                style={{
-                  width: "max-content",
-                  minWidth: "max-content",
-                  padding: "5px 14px",
-                  height: "32px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  background: "rgba(45, 212, 191, 0.14)",
-                  border: "1px solid rgba(45, 212, 191, 0.35)",
-                  color: "#34d399",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                {isQueryEditorCollapsed ? (
-                  <>
-                    <ChevronDown size={14} />
-                    <span>Expand Editor</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronUp size={14} />
-                    <span>Minimize Editor</span>
-                  </>
-                )}
-              </button>
             </div>
             <div className="toolbar" style={{ display: "flex", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -1166,7 +2727,11 @@ export function App() {
                 <span style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8", whiteSpace: "nowrap" }}>Max Rows:</span>
                 <select
                   value={maxRows}
-                  onChange={(e) => setMaxRows(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newRows = Number(e.target.value);
+                    setMaxRows(newRows);
+                    handleRun(newRows);
+                  }}
                   style={{
                     background: "transparent",
                     border: "none",
@@ -1187,7 +2752,20 @@ export function App() {
                   <option value={50000} style={{ background: "#06202c", color: "#f8fafc" }}>50,000 rows</option>
                 </select>
               </div>
-              <button className="primary-button" onClick={handleRun} disabled={loading} style={{ alignSelf: "flex-start" }}>
+              <button
+                className="primary-button"
+                onClick={handleRun}
+                disabled={loading || isRunDisabled}
+                title={isRunDisabled ? "Please select at least 1 Dynamic Filter option to run query" : "Run Query"}
+                style={{
+                  alignSelf: "flex-start",
+                  background: isRunDisabled ? "rgba(71, 85, 105, 0.4)" : undefined,
+                  color: isRunDisabled ? "#94a3b8" : undefined,
+                  borderColor: isRunDisabled ? "rgba(148, 163, 184, 0.3)" : undefined,
+                  cursor: isRunDisabled ? "not-allowed" : "pointer",
+                  opacity: isRunDisabled ? 0.6 : 1
+                }}
+              >
                 <Play size={17} />
                 <span>{loading ? "Running" : "Run"}</span>
               </button>
@@ -1236,25 +2814,12 @@ export function App() {
                     placeholder="Enter or paste Workspace ID GUID..."
                   />
                 ) : (
-                  <select 
-                    value={workspaceId}
-                    onChange={(e) => {
-                      if (e.target.value === "__MANUAL__") {
-                        setIsCustomInputMode(true);
-                      } else {
-                        handleWorkspaceSelect(e.target.value);
-                      }
-                    }}
-                    className="dynamic-filter-select"
-                  >
-                    <option value="">-- Select a Workspace ({workspaces.length}) --</option>
-                    {workspaces.map((ws) => (
-                      <option key={ws.customerId} value={ws.customerId}>
-                        {ws.name} ({ws.customerId})
-                      </option>
-                    ))}
-                    <option value="__MANUAL__">✏️ Enter Custom Workspace ID Manually...</option>
-                  </select>
+                  <GraphicalWorkspaceSelect
+                    workspaces={workspaces}
+                    workspaceId={workspaceId}
+                    onSelect={(id) => handleWorkspaceSelect(id)}
+                    onManualClick={() => setIsCustomInputMode(true)}
+                  />
                 )}
               </div>
 
@@ -1273,21 +2838,12 @@ export function App() {
                 </span>
               </div>
               <div className="dynamic-filter-inputs">
-                <select
-                  value={activePreset?.id || ""}
-                  onChange={(e) => {
-                    const found = PRESETS.find((p) => p.id === e.target.value);
-                    if (found) applyPreset(found);
-                  }}
-                  className="dynamic-filter-select"
-                >
-                  <option value="">-- Select a Log Preset ({sortedPresets.length}) --</option>
-                  {sortedPresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
+                <GraphicalPresetSelect
+                  presets={sortedPresets}
+                  activePreset={activePreset}
+                  presetColors={presetColors}
+                  onSelect={(preset) => applyPreset(preset)}
+                />
               </div>
             </div>
           </div>
@@ -1322,33 +2878,114 @@ export function App() {
             })}
           </div>
 
-            {activePreset && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "10px", backgroundColor: "rgba(0,0,0,0.03)", borderRadius: "6px" }}>
-                {activePreset.dynamicFilters && activePreset.dynamicFilters.length > 0 && (
-                  <div>
-                    <span style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", fontWeight: 700, color: "#38bdf8" }}>
-                      Dynamic Filters:
+            {/* Main Dynamic Filters Section (Dropdown Style) */}
+            {activePreset && activePreset.dynamicFilters && activePreset.dynamicFilters.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", backgroundColor: "rgba(15, 23, 42, 0.4)", borderRadius: "8px", border: "1px solid rgba(45, 212, 191, 0.2)", marginBottom: "16px", position: "relative", zIndex: openDynamicField ? 9999 : 5 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <SlidersHorizontal size={16} color="#38bdf8" />
+                    <span>Dynamic Filters:</span>
+                  </span>
+                  {totalActiveDynamicFilters > 0 ? (
+                    <span style={{ fontSize: "12px", color: "#34d399", fontWeight: 600 }}>
+                      ✓ {totalActiveDynamicFilters} filter {totalActiveDynamicFilters === 1 ? "value" : "values"} selected
                     </span>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
-                      {activePreset.dynamicFilters.map((filter) => {
-                        const rawValues = dynamicFilterValues[filter.field] || [];
-                        const sortedValues = [...rawValues].sort((a, b) =>
-                          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-                        );
-                        const searchTerm = (filterSearch[filter.field] || "").trim().toLowerCase();
-                        const matchingValues = searchTerm
-                          ? sortedValues.filter((val) => val.toLowerCase().includes(searchTerm))
-                          : sortedValues;
+                  ) : (
+                    <span style={{ fontSize: "12px", color: "#fda4af", fontWeight: 600 }}>
+                      ⚠️ Selection Required (Select at least 1 filter option to run query)
+                    </span>
+                  )}
+                </div>
 
-                        return (
-                          <div key={filter.field} className="dynamic-filter-card">
-                            <div className="dynamic-filter-header">
-                              <span className="dynamic-filter-label">{filter.label}</span>
-                              <span className="filter-count">
-                                {matchingValues.length} {matchingValues.length === 1 ? "option" : "options"}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", position: "relative", zIndex: openDynamicField ? 9999 : 5 }}>
+                  {activePreset.dynamicFilters.map((filter) => {
+                    const rawValues = dynamicFilterValues[filter.field] || [];
+                    const sortedValues = [...rawValues].sort((a, b) =>
+                      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+                    );
+                    const searchTerm = (filterSearch[filter.field] || "").trim().toLowerCase();
+                    const matchingValues = searchTerm
+                      ? sortedValues.filter((val) => val.toLowerCase().includes(searchTerm))
+                      : sortedValues;
+                    const selectedVals = selectedDynamicFilters[filter.field] || [];
+                    const isOpen = openDynamicField === filter.field;
+                    const hasSelection = selectedVals.length > 0;
+
+                    return (
+                      <div
+                        key={filter.field}
+                        ref={isOpen ? activeDynamicFieldRef : null}
+                        style={{ position: "relative", zIndex: isOpen ? 10000 : 1 }}
+                      >
+                        {/* Dropdown Trigger Button per Dynamic Filter field */}
+                        <button
+                          type="button"
+                          className="modal-trigger-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDynamicField(isOpen ? null : filter.field);
+                          }}
+                          style={{
+                            background: hasSelection ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.7)",
+                            border: `1px solid ${hasSelection ? "#10b981" : "rgba(56, 189, 248, 0.3)"}`,
+                            color: hasSelection ? "#34d399" : "#f8fafc",
+                            padding: "8px 14px",
+                            borderRadius: "8px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            cursor: "pointer",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          <SlidersHorizontal size={15} color={hasSelection ? "#10b981" : "#38bdf8"} />
+                          <span>
+                            {filter.label}{" "}
+                            {hasSelection ? (
+                              <strong style={{ color: "#34d399" }}>({selectedVals.length} selected)</strong>
+                            ) : (
+                              <span style={{ color: "#94a3b8" }}>(0 selected)</span>
+                            )}
+                          </span>
+                          {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+
+                        {/* Dropdown Menu for this Dynamic Filter field */}
+                        {isOpen && (
+                          <div
+                            className="multiselect-dropdown-menu wide-dropdown"
+                            style={{
+                              width: "420px",
+                              maxWidth: "90vw",
+                              left: 0,
+                              top: "calc(100% + 8px)",
+                              zIndex: 10001,
+                              background: "rgba(4, 18, 27, 0.94)",
+                              backdropFilter: "blur(16px)",
+                              WebkitBackdropFilter: "blur(16px)",
+                              border: "1px solid rgba(16, 185, 129, 0.5)",
+                              borderRadius: "10px",
+                              boxShadow: "0 20px 45px rgba(0, 0, 0, 0.85), 0 0 15px rgba(16, 185, 129, 0.2)"
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(16, 185, 129, 0.2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontWeight: 700, fontSize: "13px", color: "#38bdf8" }}>
+                                {filter.label}
                               </span>
+                              <button
+                                type="button"
+                                className="clear-btn"
+                                onClick={() => setOpenDynamicField(null)}
+                                style={{ fontSize: "14px", color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}
+                              >
+                                ✕
+                              </button>
                             </div>
-                            <div className="dynamic-filter-inputs">
+
+                            <div className="dynamic-filter-inputs" style={{ padding: "12px" }}>
                               <div className="filter-search-box">
                                 <Search size={14} className="filter-search-icon" />
                                 <input
@@ -1373,373 +3010,353 @@ export function App() {
                                         [filter.field]: ""
                                       }))
                                     }
-                                    title="Clear search"
                                   >
                                     ✕
                                   </button>
                                 )}
                               </div>
-                              <select
-                                value={selectedDynamicFilters[filter.field] || ""}
-                                onChange={(e) => handleDynamicFilterChange(filter.field, e.target.value)}
-                                className="dynamic-filter-select"
-                              >
-                                <option value="">-- Any ({matchingValues.length}) --</option>
-                                {matchingValues.map((val) => (
-                                  <option key={val} value={val}>
-                                    {val}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                <div ref={dropdownContainerRef} style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginTop: "12px", position: "relative", zIndex: 1000 }}>
-                  {/* Conditions Multi-Select Dropdown */}
-                  <div style={{ position: "relative" }}>
-                    <button
-                      type="button"
-                      className="modal-trigger-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === "conditions" ? null : "conditions");
-                        setDropdownSearch("");
-                      }}
-                      style={{
-                        background: presetOptions.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
-                        border: `1px solid ${presetOptions.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                        color: presetOptions.size > 0 ? "#34d399" : "#94a3b8",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <SlidersHorizontal size={15} color="#10b981" />
-                      <span>Filter Conditions ({presetOptions.size} / {activePreset.options.length})</span>
-                      {openDropdown === "conditions" ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
 
-                    {openDropdown === "conditions" && (
-                      <div className="multiselect-dropdown-menu wide-dropdown" onClick={(e) => e.stopPropagation()}>
-                        <div className="dropdown-search-box">
-                          <Search size={14} className="search-icon" />
-                          <input
-                            type="text"
-                            placeholder="Search conditions..."
-                            value={dropdownSearch}
-                            onChange={(e) => setDropdownSearch(e.target.value)}
-                          />
-                          {dropdownSearch && (
-                            <button type="button" className="clear-btn" onClick={() => setDropdownSearch("")}>✕</button>
-                          )}
-                        </div>
-                        <div className="dropdown-actions" style={{ justifyContent: "space-between", gap: "8px" }}>
-                          <div style={{ display: "flex", gap: "8px" }}>
-                            <button type="button" onClick={selectAllPresetOptions}>Select All</button>
-                            <button type="button" onClick={clearAllPresetOptions}>Deselect All</button>
-                          </div>
-                          <span style={{ fontSize: "11px", color: "#94a3b8" }}>Operators: ==, !=, contains, !contains, between</span>
-                        </div>
-                        <div className="dropdown-list" style={{ maxHeight: "280px" }}>
-                          {activePreset.options
-                            .filter(opt => !dropdownSearch || opt.label.toLowerCase().includes(dropdownSearch.toLowerCase()))
-                            .map((opt) => {
-                              const checked = presetOptions.has(opt.label) || presetOptions.has(opt.clause);
-                              const defaultOp = opt.clause.includes("!contains")
-                                ? "!contains"
-                                : opt.clause.includes("contains")
-                                ? "contains"
-                                : opt.clause.includes("between")
-                                ? "between"
-                                : opt.clause.includes("!=")
-                                ? "!="
-                                : "==";
-                              const currentOp = optionOperators[opt.label] || defaultOp;
-                              const defaultVal = opt.clause.includes("between")
-                                ? (opt.clause.match(/between\s*\(([^)]+)\)/i)?.[1] ?? "400 .. 599")
-                                : (opt.clause.match(/"([^"]*)"/)?.[1] ?? "");
-                              const currentVal = optionValues[opt.label] !== undefined ? optionValues[opt.label] : defaultVal;
-
-                              return (
-                                <div
-                                  key={opt.label}
-                                  className={`dropdown-item ${checked ? "is-selected" : ""}`}
-                                  onMouseEnter={() => setHoveredCondition(opt)}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    togglePresetOption(opt);
-                                  }}
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}
+                              <div className="dynamic-filter-actions" style={{ margin: "8px 0" }}>
+                                <button
+                                  type="button"
+                                  className="filter-action-btn"
+                                  onClick={() => selectAllDynamicFilterValues(filter.field, matchingValues)}
+                                  disabled={matchingValues.length === 0}
                                 >
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => {}}
-                                    />
-                                    <span style={{ fontWeight: 600, fontSize: "12px", color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                      {opt.label}
+                                  Select All ({matchingValues.length})
+                                </button>
+                                <button
+                                  type="button"
+                                  className="filter-action-btn clear"
+                                  onClick={() => clearDynamicFilterValues(filter.field)}
+                                  disabled={selectedVals.length === 0}
+                                >
+                                  Deselect All
+                                </button>
+                              </div>
+
+                              <div className="dynamic-filter-options-list" style={{ maxHeight: "180px" }}>
+                                {matchingValues.length === 0 ? (
+                                  <div className="dynamic-filter-empty">No matching values found</div>
+                                ) : (
+                                  matchingValues.map((val) => {
+                                    const isSelected = selectedVals.includes(val);
+                                    return (
+                                      <label
+                                        key={val}
+                                        className={`dynamic-filter-option-item ${isSelected ? "selected" : ""}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={() => toggleDynamicFilterValue(filter.field, val)}
+                                        />
+                                        <span className="option-text" title={val}>{val}</span>
+                                      </label>
+                                    );
+                                  })
+                                )}
+                              </div>
+
+                              {selectedVals.length > 0 && (
+                                <div className="selected-chips-container" style={{ marginTop: "10px" }}>
+                                  {selectedVals.map((val) => (
+                                    <span key={val} className="selected-chip" title={val}>
+                                      <span className="chip-text">{val}</span>
+                                      <button
+                                        type="button"
+                                        className="chip-remove"
+                                        onClick={() => toggleDynamicFilterValue(filter.field, val)}
+                                      >
+                                        ✕
+                                      </button>
                                     </span>
-                                  </div>
-
-                                  <div
-                                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <select
-                                      value={currentOp}
-                                      onChange={(e) => handleOptionOperatorChange(opt, e.target.value)}
-                                      style={{
-                                        background: "rgba(4, 20, 28, 0.95)",
-                                        border: "1px solid rgba(16, 185, 129, 0.4)",
-                                        borderRadius: "4px",
-                                        color: "#34d399",
-                                        fontSize: "11px",
-                                        fontWeight: 700,
-                                        padding: "3px 6px",
-                                        outline: "none",
-                                        cursor: "pointer"
-                                      }}
-                                    >
-                                      <option value="==">==</option>
-                                      <option value="!=">!=</option>
-                                      <option value="contains">contains</option>
-                                      <option value="!contains">!contains</option>
-                                      <option value="between">between</option>
-                                    </select>
-
-                                    <input
-                                      type="text"
-                                      value={currentVal}
-                                      onChange={(e) => handleOptionValueChange(opt, e.target.value)}
-                                      placeholder={currentOp === "between" ? "400 .. 599" : "value..."}
-                                      style={{
-                                        width: "160px",
-                                        background: "rgba(4, 20, 28, 0.95)",
-                                        border: "1px solid rgba(16, 185, 129, 0.3)",
-                                        borderRadius: "4px",
-                                        color: "#f8fafc",
-                                        fontSize: "11px",
-                                        padding: "3px 8px",
-                                        outline: "none"
-                                      }}
-                                    />
-                                  </div>
+                                  ))}
                                 </div>
-                              );
-                            })}
-                        </div>
-
-                        {hoveredCondition && (
-                          <div style={{
-                            padding: "6px 12px",
-                            background: "rgba(4, 23, 32, 0.95)",
-                            borderTop: "1px solid rgba(16, 185, 129, 0.3)",
-                            fontSize: "11px",
-                            color: "#38bdf8",
-                            fontFamily: "monospace",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis"
-                          }}>
-                            <span>⚡ KQL Preview: </span>
-                            <span style={{ color: "#34d399" }}>
-                              {buildOptionClause(hoveredCondition, optionOperators[hoveredCondition.label], optionValues[hoveredCondition.label])}
-                            </span>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                  {/* Project Columns Multi-Select Dropdown */}
-                  <div style={{ position: "relative" }}>
-                    <button
-                      type="button"
-                      className="modal-trigger-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === "columns" ? null : "columns");
-                        setDropdownSearch("");
-                      }}
-                      style={{
-                        background: presetProjectColumns.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
-                        border: `1px solid ${presetProjectColumns.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                        color: presetProjectColumns.size > 0 ? "#34d399" : "#94a3b8",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <Columns3 size={15} color="#10b981" />
-                      <span>Project Columns ({presetProjectColumns.size} / {activePreset.projectColumns.length})</span>
-                      {openDropdown === "columns" ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
+            {/* Filter Condition & Project Column dropdown bar positioned above KQL Code Editor */}
+            {activePreset && (
+              <div ref={dropdownContainerRef} style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px", position: "relative", zIndex: 1000 }}>
+                {/* Filter Conditions Multi-Select Dropdown */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="modal-trigger-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDropdown(openDropdown === "conditions" ? null : "conditions");
+                      setDropdownSearch("");
+                    }}
+                    style={{
+                      background: presetOptions.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
+                      border: `1px solid ${presetOptions.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
+                      color: presetOptions.size > 0 ? "#34d399" : "#94a3b8",
+                      padding: "8px 14px",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    <SlidersHorizontal size={15} color="#10b981" />
+                    <span>Filter Conditions ({presetOptions.size} / {activePreset.options.length})</span>
+                    {openDropdown === "conditions" ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
 
-                    {openDropdown === "columns" && (
-                      <div className="multiselect-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                        <div className="dropdown-search-box">
-                          <Search size={14} className="search-icon" />
-                          <input
-                            type="text"
-                            placeholder="Search columns..."
-                            value={dropdownSearch}
-                            onChange={(e) => setDropdownSearch(e.target.value)}
-                          />
-                          {dropdownSearch && (
-                            <button type="button" className="clear-btn" onClick={() => setDropdownSearch("")}>✕</button>
-                          )}
+                  {openDropdown === "conditions" && (
+                    <div className="multiselect-dropdown-menu wide-dropdown" onClick={(e) => e.stopPropagation()}>
+                      <div className="dropdown-search-box">
+                        <Search size={14} className="search-icon" />
+                        <input
+                          type="text"
+                          placeholder="Search conditions..."
+                          value={dropdownSearch}
+                          onChange={(e) => setDropdownSearch(e.target.value)}
+                        />
+                        {dropdownSearch && (
+                          <button type="button" className="clear-btn" onClick={() => setDropdownSearch("")}>✕</button>
+                        )}
+                      </div>
+                      <div className="dropdown-actions" style={{ justifyContent: "space-between", gap: "8px" }}>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button type="button" onClick={selectAllPresetOptions}>Select All</button>
+                          <button type="button" onClick={clearAllPresetOptions}>Deselect All</button>
                         </div>
-                        <div className="dropdown-actions">
-                          <button type="button" onClick={selectAllProjectColumns}>Select All</button>
-                          <button type="button" onClick={clearAllProjectColumns}>Deselect All</button>
-                        </div>
-                        <div className="dropdown-list">
-                          {activePreset.projectColumns
-                            .filter(col => !dropdownSearch || col.toLowerCase().includes(dropdownSearch.toLowerCase()))
-                            .map((col) => {
-                              const checked = presetProjectColumns.has(col);
-                              return (
-                                <div
-                                  key={col}
-                                  className={`dropdown-item ${checked ? "is-selected" : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleProjectColumn(col);
-                                  }}
-                                >
+                        <span style={{ fontSize: "11px", color: "#94a3b8" }}>Operators: ==, !=, contains, !contains, between</span>
+                      </div>
+                      <div className="dropdown-list" style={{ maxHeight: "280px" }}>
+                        {activePreset.options
+                          .filter(opt => !dropdownSearch || opt.label.toLowerCase().includes(dropdownSearch.toLowerCase()))
+                          .map((opt) => {
+                            const checked = presetOptions.has(opt.label) || presetOptions.has(opt.clause);
+                            const defaultOp = opt.clause.includes("!contains")
+                              ? "!contains"
+                              : opt.clause.includes("contains")
+                              ? "contains"
+                              : opt.clause.includes("between")
+                              ? "between"
+                              : opt.clause.includes("!=")
+                              ? "!="
+                              : "==";
+                            const currentOp = optionOperators[opt.label] || defaultOp;
+                            const defaultVal = opt.clause.includes("between")
+                              ? (opt.clause.match(/between\s*\(([^)]+)\)/i)?.[1] ?? "400 .. 599")
+                              : (opt.clause.match(/"([^"]*)"/)?.[1] ?? "");
+                            const currentVal = optionValues[opt.label] !== undefined ? optionValues[opt.label] : defaultVal;
+
+                            return (
+                              <div
+                                key={opt.label}
+                                className={`dropdown-item ${checked ? "is-selected" : ""}`}
+                                onMouseEnter={() => setHoveredCondition(opt)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePresetOption(opt);
+                                }}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
                                   <input
                                     type="checkbox"
                                     checked={checked}
                                     onChange={() => {}}
                                   />
-                                  <span>{col}</span>
+                                  <span style={{ fontWeight: 600, fontSize: "12px", color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {opt.label}
+                                  </span>
                                 </div>
-                              );
-                            })}
-                        </div>
+
+                                <div
+                                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <select
+                                    value={currentOp}
+                                    onChange={(e) => handleOptionOperatorChange(opt, e.target.value)}
+                                    style={{
+                                      background: "rgba(4, 20, 28, 0.95)",
+                                      border: "1px solid rgba(16, 185, 129, 0.4)",
+                                      borderRadius: "4px",
+                                      color: "#34d399",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      padding: "3px 6px",
+                                      outline: "none",
+                                      cursor: "pointer"
+                                    }}
+                                  >
+                                    <option value="==">==</option>
+                                    <option value="!=">!=</option>
+                                    <option value="contains">contains</option>
+                                    <option value="!contains">!contains</option>
+                                    <option value="<">&lt;</option>
+                                    <option value="<=">&lt;=</option>
+                                    <option value=">">&gt;</option>
+                                    <option value=">=">&gt;=</option>
+                                    <option value="between">between</option>
+                                  </select>
+
+                                  <input
+                                    type="text"
+                                    value={currentVal}
+                                    onChange={(e) => handleOptionValueChange(opt, e.target.value)}
+                                    placeholder={currentOp === "between" ? "400 .. 599" : "value..."}
+                                    style={{
+                                      width: "160px",
+                                      background: "rgba(4, 20, 28, 0.95)",
+                                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                                      borderRadius: "4px",
+                                      color: "#f8fafc",
+                                      fontSize: "11px",
+                                      padding: "3px 8px",
+                                      outline: "none"
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
-                    )}
-                  </div>
+
+                      {hoveredCondition && (
+                        <div style={{
+                          padding: "6px 12px",
+                          background: "rgba(4, 23, 32, 0.95)",
+                          borderTop: "1px solid rgba(16, 185, 129, 0.3)",
+                          fontSize: "11px",
+                          color: "#38bdf8",
+                          fontFamily: "monospace",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis"
+                        }}>
+                          <span>⚡ KQL Preview: </span>
+                          <span style={{ color: "#34d399" }}>
+                            {buildOptionClause(hoveredCondition, optionOperators[hoveredCondition.label], optionValues[hoveredCondition.label])}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Project Columns Multi-Select Dropdown */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="modal-trigger-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDropdown(openDropdown === "columns" ? null : "columns");
+                      setDropdownSearch("");
+                    }}
+                    style={{
+                      background: presetProjectColumns.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
+                      border: `1px solid ${presetProjectColumns.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
+                      color: presetProjectColumns.size > 0 ? "#34d399" : "#94a3b8",
+                      padding: "8px 14px",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    <Columns3 size={15} color="#10b981" />
+                    <span>Project Columns ({presetProjectColumns.size} / {activePreset.projectColumns.length})</span>
+                    {openDropdown === "columns" ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {openDropdown === "columns" && (
+                    <div className="multiselect-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                      <div className="dropdown-search-box">
+                        <Search size={14} className="search-icon" />
+                        <input
+                          type="text"
+                          placeholder="Search columns..."
+                          value={dropdownSearch}
+                          onChange={(e) => setDropdownSearch(e.target.value)}
+                        />
+                        {dropdownSearch && (
+                          <button type="button" className="clear-btn" onClick={() => setDropdownSearch("")}>✕</button>
+                        )}
+                      </div>
+                      <div className="dropdown-actions">
+                        <button type="button" onClick={selectAllProjectColumns}>Select All</button>
+                        <button type="button" onClick={clearAllProjectColumns}>Deselect All</button>
+                      </div>
+                      <div className="dropdown-list">
+                        {activePreset.projectColumns
+                          .filter(col => !dropdownSearch || col.toLowerCase().includes(dropdownSearch.toLowerCase()))
+                          .map((col) => {
+                            const checked = presetProjectColumns.has(col);
+                            return (
+                              <div
+                                key={col}
+                                className={`dropdown-item ${checked ? "is-selected" : ""}`}
+                                onClick={() => toggleProjectColumn(col)}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {}}
+                                />
+                                <span>{col}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-          {!isQueryEditorCollapsed ? (
-            <div style={{ position: "relative" }}>
+            {isRunDisabled && (
               <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "6px 12px",
-                background: "rgba(4, 23, 32, 0.95)",
-                border: "1px solid rgba(45, 212, 191, 0.28)",
-                borderBottom: "none",
-                borderTopLeftRadius: "8px",
-                borderTopRightRadius: "8px",
-                fontSize: "12px",
-                color: "#94a3b8"
-              }}>
-                <span style={{ fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span>KQL Code Editor</span>
-                  <span style={{ fontSize: "11px", color: "#64748b" }}>({query.split("\n").length} lines)</span>
-                </span>
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => setIsQueryEditorCollapsed(true)}
-                  title="Minimize Query Editor"
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    padding: "5px 14px",
-                    height: "30px",
-                    width: "max-content",
-                    minWidth: "max-content",
-                    background: "rgba(45, 212, 191, 0.14)",
-                    border: "1px solid rgba(45, 212, 191, 0.35)",
-                    color: "#34d399",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  <ChevronUp size={14} />
-                  <span>Minimize Editor</span>
-                </button>
-              </div>
-              <textarea
-                className="query-editor"
-                style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0 }}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                spellCheck={false}
-              />
-            </div>
-          ) : (
-            <div 
-              style={{
-                padding: "10px 14px",
-                background: "rgba(4, 23, 32, 0.88)",
-                border: "1px solid rgba(45, 212, 191, 0.28)",
+                marginBottom: "12px",
+                padding: "8px 14px",
+                background: "rgba(244, 63, 94, 0.12)",
+                border: "1px solid rgba(244, 63, 94, 0.4)",
                 borderRadius: "8px",
-                fontSize: "13px",
-                color: "#94a3b8",
+                color: "#fda4af",
+                fontSize: "12px",
+                fontWeight: 600,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer"
-              }}
-              onClick={() => setIsQueryEditorCollapsed(false)}
-            >
-              <span style={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {query.split("\n")[0]} ... ({query.split("\n").length} lines)
-              </span>
-              <button 
-                type="button"
-                className="icon-button" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsQueryEditorCollapsed(false);
-                }}
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  padding: "5px 14px",
-                  height: "30px",
-                  width: "max-content",
-                  minWidth: "max-content",
-                  background: "rgba(45, 212, 191, 0.14)",
-                  border: "1px solid rgba(45, 212, 191, 0.35)",
-                  color: "#34d399",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                <ChevronDown size={14} />
-                <span>Expand Editor</span>
-              </button>
-            </div>
-          )}
+                gap: "8px"
+              }}>
+                <span>⚠️ Mandatory: Please select at least 1 Dynamic Filter option above to enable running the query.</span>
+              </div>
+            )}
+
+            <KqlCodeEditor
+              query={query}
+              onChange={(newQuery) => setQuery(newQuery)}
+              onRun={handleRun}
+              loading={loading}
+              isRunDisabled={isRunDisabled}
+              activePreset={activePreset}
+              tableColumns={result?.tables?.[0]?.columns?.map((c) => c.name) || []}
+              dynamicFilterValues={dynamicFilterValues}
+            />
         </div>
       </section>
 
@@ -1777,7 +3394,15 @@ export function App() {
       )}
 
       {error ? <div className="alert error">{error}</div> : null}
-      {result?.partialError ? <div className="alert warning">{result.partialError}</div> : null}
+      {result?.partialError ? (
+        <QueryWarningAlert
+          partialError={result.partialError}
+          query={query}
+          timespan={timespan}
+          maxRows={maxRows}
+          workspaceId={workspaceId}
+        />
+      ) : null}
 
       <section className="results">
         {!result && !loading ? (
@@ -1785,12 +3410,96 @@ export function App() {
         ) : null}
         {loading ? <div className="empty-results">Query is running...</div> : null}
         {result?.tables.map((table) => (
-          <ResultTable key={table.name} table={table} presetProjectColumns={presetProjectColumns} />
+          <ResultTable key={table.name} table={table} query={query} presetProjectColumns={presetProjectColumns} />
         ))}
       </section>
 
       {isChatOpen && <Chatbot onClose={() => setIsChatOpen(false)} />}
     </main>
+  );
+}
+
+function QueryWarningAlert({
+  partialError,
+  query,
+  timespan,
+  maxRows,
+  workspaceId
+}: {
+  partialError: string;
+  query: string;
+  timespan: string;
+  maxRows: number;
+  workspaceId: string;
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+
+  return (
+    <div className="alert warning" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+          <span style={{ fontSize: "16px", marginTop: "2px" }}>⚠️</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#fde68a" }}>
+              Query Execution Warning / Truncation
+            </div>
+            <div style={{ fontSize: "13px", color: "#fef3c7", marginTop: "2px" }}>
+              {partialError || "There were some errors or partial data truncation when processing your query."}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowDetails(!showDetails)}
+          style={{
+            background: "rgba(217, 119, 6, 0.3)",
+            border: "1px solid rgba(251, 191, 36, 0.4)",
+            color: "#fde68a",
+            borderRadius: "6px",
+            padding: "4px 10px",
+            fontSize: "11px",
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            flexShrink: 0
+          }}
+        >
+          {showDetails ? "Hide Error Details ▲" : "View Error Details ▾"}
+        </button>
+      </div>
+
+      {showDetails && (
+        <div
+          style={{
+            background: "rgba(0, 0, 0, 0.45)",
+            border: "1px solid rgba(251, 191, 36, 0.3)",
+            borderRadius: "6px",
+            padding: "12px",
+            fontSize: "12px",
+            color: "#cbd5e1",
+            fontFamily: "monospace",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px"
+          }}
+        >
+          <div><strong style={{ color: "#fde68a" }}>Workspace ID:</strong> {workspaceId || "Default Workspace"}</div>
+          <div><strong style={{ color: "#fde68a" }}>Timespan Requested:</strong> {timespan}</div>
+          <div><strong style={{ color: "#fde68a" }}>Max Rows:</strong> {maxRows}</div>
+          <div>
+            <strong style={{ color: "#fde68a" }}>Executed KQL Query:</strong>
+            <pre style={{ margin: "4px 0 0 0", padding: "8px", background: "rgba(15, 23, 42, 0.8)", borderRadius: "4px", color: "#38bdf8", overflowX: "auto" }}>
+              {query}
+            </pre>
+          </div>
+          <div>
+            <strong style={{ color: "#fde68a" }}>Azure Warning Details:</strong>
+            <div style={{ color: "#fda4af", marginTop: "2px" }}>{partialError}</div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1818,7 +3527,7 @@ function SegmentedControl({
   );
 }
 
-function ResultTable({ table, presetProjectColumns }: { table: QueryTable; presetProjectColumns?: Set<string> }) {
+function ResultTable({ table, query = "", presetProjectColumns }: { table: QueryTable; query?: string; presetProjectColumns?: Set<string> }) {
   const [search, setSearch] = useState("");
   const [sortColumnName, setSortColumnName] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
@@ -1891,26 +3600,16 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
     setPage(0);
   }, [table]);
 
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (presetProjectColumns && presetProjectColumns.size > 0) {
-      const active = table.columns.map((c) => c.name).filter((name) => presetProjectColumns.has(name));
-      if (active.length > 0) return active;
-    }
-    return table.columns.map((c) => c.name);
-  });
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() =>
+    getRelatedColumns(query, table.columns.map((c) => c.name), presetProjectColumns)
+  );
 
   useEffect(() => {
-    if (presetProjectColumns && presetProjectColumns.size > 0) {
-      const active = table.columns.map((c) => c.name).filter((name) => presetProjectColumns.has(name));
-      if (active.length > 0) {
-        setVisibleColumns(active);
-        return;
-      }
-    }
-    setVisibleColumns(table.columns.map((c) => c.name));
-  }, [table, presetProjectColumns]);
+    const related = getRelatedColumns(query, table.columns.map((c) => c.name), presetProjectColumns);
+    setVisibleColumns(related);
+  }, [table, query, presetProjectColumns]);
 
-  const [pageSize, setPageSize] = useState<number>(100);
+  const [pageSize, setPageSize] = useState<number>(50);
 
   // Filtered and ordered visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -2007,8 +3706,8 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
   const [isValueFilterOpen, setIsValueFilterOpen] = useState(false);
   const valueFilterRef = useRef<HTMLDivElement | null>(null);
 
-  // Column filter operators state: ==, !=, contains, !contains
-  const [columnFilterOperators, setColumnFilterOperators] = useState<Record<string, "==" | "!=" | "contains" | "!contains">>({});
+  // Column filter operators state: ==, !=, contains, !contains, <, <=, >, >=
+  const [columnFilterOperators, setColumnFilterOperators] = useState<Record<string, FilterOperator>>({});
 
   // Summary table states
   const [summaryScope, setSummaryScope] = useState<"filtered" | "all">("filtered");
@@ -2082,16 +3781,8 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
 
       if (selectedSet && selectedSet.size > 0) {
         filtered = filtered.filter((row) => {
-          const rawVal = String(row[colIdx] ?? "");
-
-          const hasVal = selectedSet.has(rawVal);
-          if (op === "==" || op === "contains") {
-            if (!hasVal) return false;
-          } else if (op === "!=" || op === "!contains") {
-            if (hasVal) return false;
-          }
-
-          return true;
+          const rawVal = row[colIdx];
+          return evaluateFilterCondition(rawVal, selectedSet, op);
         });
       }
     });
@@ -2420,7 +4111,7 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
                         <select
                           value={columnFilterOperators[hoveredColumn] || "=="}
                           onChange={(e) => {
-                            const newOp = e.target.value as "==" | "!=" | "contains" | "!contains";
+                            const newOp = e.target.value as FilterOperator;
                             setColumnFilterOperators((prev) => ({ ...prev, [hoveredColumn]: newOp }));
                           }}
                           style={{
@@ -2440,6 +4131,10 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
                           <option value="!=">!= (Not Equals)</option>
                           <option value="contains">contains (Contains)</option>
                           <option value="!contains">!contains (Does Not Contain)</option>
+                          <option value="<">&lt; (Less Than)</option>
+                          <option value="<=">&lt;= (Less Than or Equal To)</option>
+                          <option value=">">&gt; (Greater Than)</option>
+                          <option value=">=">&gt;= (Greater Than or Equal To)</option>
                         </select>
                       </div>
                     </div>
@@ -2732,7 +4427,8 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
               cursor: "pointer"
             }}
           >
-            <option value={50}>50</option>
+            <option value={25}>25</option>
+            <option value={50}>50 (Default)</option>
             <option value={100}>100</option>
             <option value={200}>200</option>
             <option value={500}>500</option>
@@ -3169,14 +4865,16 @@ function ResultTable({ table, presetProjectColumns }: { table: QueryTable; prese
 function formatCell(value: unknown, useLocalTime: boolean = false): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
-  const str = String(value);
+  const str = String(value).trim();
   
-  if (useLocalTime) {
-    // Check if string looks like an ISO UTC timestamp (e.g., 2026-07-16T02:18:57Z or with milliseconds)
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(str)) {
-      const d = new Date(str);
-      if (!isNaN(d.getTime())) {
+  // Check if string looks like an ISO date/timestamp (e.g., 2026-07-16T02:18:57Z or with milliseconds/offsets)
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/i.test(str)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      if (useLocalTime) {
         return d.toLocaleString();
+      } else {
+        return d.toLocaleString(undefined, { timeZone: "UTC" });
       }
     }
   }

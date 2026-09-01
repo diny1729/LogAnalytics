@@ -27,6 +27,8 @@ export function getEnv(key: string): string {
       return import.meta.env.VITE_WORKSPACES ?? "";
     case "VITE_LOG_ANALYTICS_WORKSPACE_ID":
       return import.meta.env.VITE_LOG_ANALYTICS_WORKSPACE_ID ?? "";
+    case "VITE_ALLOWED_AZURE_AD_GROUPS":
+      return import.meta.env.VITE_ALLOWED_AZURE_AD_GROUPS ?? "";
     default:
       return "";
   }
