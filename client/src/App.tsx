@@ -746,21 +746,18 @@ function validateKql(query: string): KqlSyntaxError[] {
     if (!trimmed) continue;
 
     // Strip verbatim double-quoted strings: @"..."
-    let sanitized = rawLine.replace(/@"(?:[^"])*"/g, '""');
+    let sanitized = rawLine.replace(/@"(?:[^"])*"/g, '');
     // Strip verbatim single-quoted strings: @'...'
-    sanitized = sanitized.replace(/@'(?:[^'])*'/g, "''");
+    sanitized = sanitized.replace(/@'(?:[^'])*'/g, '');
     // Strip normal double-quoted strings: "..."
-    sanitized = sanitized.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    sanitized = sanitized.replace(/"(?:[^"\\]|\\.)*"/g, '');
     // Strip normal single-quoted strings: '...'
-    sanitized = sanitized.replace(/'(?:[^'\\]|\\.)*'/g, "''");
+    sanitized = sanitized.replace(/'(?:[^'\\]|\\.)*'/g, '');
 
-    const doubleQuoteCount = (sanitized.match(/"/g) || []).length;
-    const singleQuoteCount = (sanitized.match(/'/g) || []).length;
-
-    if (doubleQuoteCount % 2 !== 0) {
+    if (sanitized.includes('"')) {
       errors.push({ line: lineNum, message: `Unclosed double quote (") on line ${lineNum}` });
     }
-    if (singleQuoteCount % 2 !== 0) {
+    if (sanitized.includes("'")) {
       errors.push({ line: lineNum, message: `Unclosed single quote (') on line ${lineNum}` });
     }
 
@@ -1174,6 +1171,17 @@ function KqlCodeEditor({
   }
 
   const [editorSize, setEditorSize] = useState<"normal" | "minimized" | "expanded">("normal");
+
+  useEffect(() => {
+    if (loading) {
+      setEditorSize("minimized");
+    }
+  }, [loading]);
+
+  const handleRunClick = (e?: React.MouseEvent) => {
+    setEditorSize("minimized");
+    onRun(e);
+  };
   const lines = query.split("\n");
 
   return (
@@ -1250,7 +1258,7 @@ function KqlCodeEditor({
           <button
             type="button"
             className="primary-button"
-            onClick={onRun}
+            onClick={handleRunClick}
             disabled={loading || isRunDisabled}
             title={isRunDisabled ? "Please select at least 1 Dynamic Filter option to run query" : "Run Query"}
             style={{
