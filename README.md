@@ -141,6 +141,56 @@ Configurable via environment variables or Kubernetes secrets:
 
 ---
 
+## Azure AD Authentication & Security Group Setup Guide
+
+The application supports Single Sign-On (SSO) using Microsoft Entra ID (Azure AD) via MSAL (`@azure/msal-react`). Follow these steps to configure authentication and restrict access to authorized Azure AD Security Groups.
+
+### Step 1: Register Application in Azure Portal
+1. Navigate to **Azure Portal** > **Microsoft Entra ID** > **App Registrations** > **New Registration**.
+2. Enter Name: `Azure Log Analytics KQL Explorer`.
+3. Supported account types: **Accounts in this organizational directory only (Single tenant)**.
+4. Platform Configuration:
+   - Platform type: **Single-page application (SPA)**.
+   - Redirect URIs: `http://localhost:5173`, `http://localhost:8080`, or your production deployment URL.
+5. Click **Register** and copy your **Application (client) ID** and **Directory (tenant) ID**.
+
+---
+
+### Step 2: Configure Environment Variables
+Set the following variables in your root `.env` file or Kubernetes `aks/secret.yaml`:
+
+```env
+# Enable Azure AD Login screen (set to "false" to bypass login screen during local testing)
+VITE_REQUIRE_AZURE_AD_AUTH=true
+
+# Azure AD App Registration (SPA) Details
+VITE_AZURE_CLIENT_ID="00000000-0000-0000-0000-000000000000"
+VITE_AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000"
+
+# Restrict login access to specific Azure AD Security Groups (comma-separated Group Object IDs or Names)
+VITE_ALLOWED_AZURE_AD_GROUPS="SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6"
+```
+
+> **Note**: If `VITE_ALLOWED_AZURE_AD_GROUPS` is left empty (`""`), all authenticated users within your Azure AD tenant will be granted access to the query workspace.
+
+---
+
+### Step 3: Enable Security Group Claims in Azure AD Manifest
+To enforce group-based authorization (`VITE_ALLOWED_AZURE_AD_GROUPS`), your Azure AD App Registration must emit user group claims in the MSAL ID Token:
+
+1. **Option A (Token Configuration GUI)**:
+   - In your Azure AD App Registration, go to **Token configuration** > **Add groups claim**.
+   - Select **Security groups** (or **All groups**) under **ID**, then click **Add**.
+2. **Option B (App Manifest)**:
+   - In your Azure AD App Registration, select **Manifest**.
+   - Locate `"groupMembershipClaims"` and set its value to `"SecurityGroup"`:
+     ```json
+     "groupMembershipClaims": "SecurityGroup"
+     ```
+3. Save the manifest. When users authenticate, MSAL receives their group memberships in ID token claims. If a user is not a member of any group listed in `VITE_ALLOWED_AZURE_AD_GROUPS`, the application presents an **Access Denied** authorization screen detailing authorized groups and troubleshooting steps.
+
+---
+
 ## Local Development & Execution
 
 ```powershell
