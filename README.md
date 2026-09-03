@@ -55,6 +55,26 @@ A container-first application designed for querying Azure Log Analytics workspac
   - **Interactive Column Header Sorting**: Click any header (`Column Name`, `Distinct Output Value`, `Count`, `% Share`, or dynamic column headers) to sort rows in Ascending (`↑`) or Descending (`↓`) order.
   - **Dynamic View Scope Toggle**: Switch between summarizing over active primary filtered results (`Filtered`) or the total dataset (`All Rows`).
 
+- **Multi-Tab Query Workspace (`Multi Tab`)**:
+  - Open, switch between, and manage multiple query tabs (`Query 1`, `Query 2`, etc.) simultaneously.
+  - Each tab maintains an isolated, independent state including KQL editor query text, active preset, filter conditions, project columns, dynamic filters, workspace ID, timespan, max rows, and query result tables.
+  - Changing workspace ID on a tab resets all query data for that specific tab cleanly, keeping other open tabs untouched.
+
+- **KQL Code Intellisense & Command Suggestions (`Command Suggestions`)**:
+  - Live autocompletion and KQL command suggestions directly within the KQL Code Editor.
+  - Autocompletes KQL keywords (`where`, `project`, `summarize`, `extend`, `order by`, `count()`, `ago()`, `contains`, `between`, `by`, `take`, `limit`, etc.) and column field names as you type.
+  - Press `Tab`, `Enter`, or click a suggestion chip to insert commands instantly into the editor.
+
+- **Real-Time KQL Syntax Error Notifications (`Syntax Error Notifications`)**:
+  - Real-time syntax validation engine (`validateKql`) analyzing KQL queries as you type.
+  - Detects missing/unmatched parentheses, brackets, invalid or misspelled operators, and unclosed quotes.
+  - Displays header warning badges (e.g. `⚠️ 1 Syntax Error` / `⚠️ N Syntax Errors`) and red glowing alert borders (`rgba(244, 63, 94, 0.5)`) detailing exact line numbers and syntax diagnostic explanations.
+
+- **Smart Dropdown Auto-Minimizing & Deferred Telemetry Execution**:
+  - All dropdown menus (**Filter Conditions**, **Project Columns**, **Dynamic Filters**) auto-minimize when clicking outside the container or pressing `Escape`.
+  - In-dropdown selections in **Summarized Column Telemetry** update draft states smoothly, deferring table re-summarization until mouse leaves the menu (`onMouseLeave`) to eliminate page scroll jumps and layout shifts while clicking checkboxes.
+  - Numeric filter conditions (e.g. `timeTaken_d > 3`, `SourcePort == 80`) omit string quotes for native integer/double KQL execution.
+
 - **Secure Azure AD Auth & Workspace Discovery**:
   - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
 
