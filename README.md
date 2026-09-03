@@ -70,11 +70,6 @@ A container-first application designed for querying Azure Log Analytics workspac
   - Detects missing/unmatched parentheses, brackets, invalid or misspelled operators, and unclosed quotes.
   - Displays header warning badges (e.g. `⚠️ 1 Syntax Error` / `⚠️ N Syntax Errors`) and red glowing alert borders (`rgba(244, 63, 94, 0.5)`) detailing exact line numbers and syntax diagnostic explanations.
 
-- **Smart Dropdown Auto-Minimizing & Deferred Telemetry Execution**:
-  - All dropdown menus (**Filter Conditions**, **Project Columns**, **Dynamic Filters**) auto-minimize when clicking outside the container or pressing `Escape`.
-  - In-dropdown selections in **Summarized Column Telemetry** update draft states smoothly, deferring table re-summarization until mouse leaves the menu (`onMouseLeave`) to eliminate page scroll jumps and layout shifts while clicking checkboxes.
-  - Numeric filter conditions (e.g. `timeTaken_d > 3`, `SourcePort == 80`) omit string quotes for native integer/double KQL execution.
-
 - **Secure Azure AD Auth & Workspace Discovery**:
   - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
 
