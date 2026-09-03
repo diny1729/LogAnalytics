@@ -98,6 +98,61 @@ function getRelatedColumns(
 
 export type FilterOperator = "==" | "!=" | "contains" | "!contains" | "<" | "<=" | ">" | ">=";
 
+function matchesValueOperator(valStr: string, op: FilterOperator, searchStr: string): boolean {
+  const searchTerm = searchStr.trim();
+  if (!searchTerm) return true;
+
+  const valLower = valStr.toLowerCase();
+  const searchLower = searchTerm.toLowerCase();
+
+  if (op === "contains") {
+    return valLower.includes(searchLower);
+  }
+  if (op === "!contains") {
+    return !valLower.includes(searchLower);
+  }
+  if (op === "==") {
+    return valLower === searchLower;
+  }
+  if (op === "!=") {
+    return valLower !== searchLower;
+  }
+
+  // Numeric or Date Comparison operators: <, <=, >, >=
+  const numVal = Number(valStr);
+  const numTarget = Number(searchTerm);
+  const isValNum = valStr.trim() !== "" && !isNaN(numVal);
+  const isTargetNum = !isNaN(numTarget);
+
+  if (isValNum && isTargetNum) {
+    if (op === "<") return numVal < numTarget;
+    if (op === "<=") return numVal <= numTarget;
+    if (op === ">") return numVal > numTarget;
+    if (op === ">=") return numVal >= numTarget;
+  }
+
+  const dateVal = new Date(valStr).getTime();
+  const dateTarget = new Date(searchTerm).getTime();
+  const isValDate = !isNaN(dateVal) && (valStr.includes("-") || valStr.includes(":"));
+  const isTargetDate = !isNaN(dateTarget);
+
+  if (isValDate && isTargetDate) {
+    if (op === "<") return dateVal < dateTarget;
+    if (op === "<=") return dateVal <= dateTarget;
+    if (op === ">") return dateVal > dateTarget;
+    if (op === ">=") return dateVal >= dateTarget;
+  }
+
+  // Fallback to string locale comparison
+  const cmp = valStr.localeCompare(searchTerm, undefined, { numeric: true, sensitivity: "base" });
+  if (op === "<") return cmp < 0;
+  if (op === "<=") return cmp <= 0;
+  if (op === ">") return cmp > 0;
+  if (op === ">=") return cmp >= 0;
+
+  return false;
+}
+
 function evaluateFilterCondition(
   rawVal: unknown,
   selectedSet: Set<string>,
@@ -114,40 +169,9 @@ function evaluateFilterCondition(
   }
 
   // Comparison operators: <, <=, >, >=
-  const numCell = Number(rawVal);
-  const isCellNum = rawVal !== null && rawVal !== undefined && rawVal !== "" && !isNaN(numCell);
-
-  const dateCell = typeof rawVal === "string" || rawVal instanceof Date ? new Date(String(rawVal)).getTime() : NaN;
-  const isCellDate = !isNaN(dateCell) && typeof rawVal === "string" && (rawVal.includes("-") || rawVal.includes(":"));
-
-  return Array.from(selectedSet).some((targetStr) => {
-    const numTarget = Number(targetStr);
-    const isTargetNum = targetStr !== "" && !isNaN(numTarget);
-
-    if (isCellNum && isTargetNum) {
-      if (op === "<") return numCell < numTarget;
-      if (op === "<=") return numCell <= numTarget;
-      if (op === ">") return numCell > numTarget;
-      if (op === ">=") return numCell >= numTarget;
-    }
-
-    const dateTarget = new Date(targetStr).getTime();
-    if (isCellDate && !isNaN(dateTarget)) {
-      if (op === "<") return dateCell < dateTarget;
-      if (op === "<=") return dateCell <= dateTarget;
-      if (op === ">") return dateCell > dateTarget;
-      if (op === ">=") return dateCell >= dateTarget;
-    }
-
-    // String comparison fallback
-    const cmp = strVal.localeCompare(targetStr, undefined, { numeric: true, sensitivity: "base" });
-    if (op === "<") return cmp < 0;
-    if (op === "<=") return cmp <= 0;
-    if (op === ">") return cmp > 0;
-    if (op === ">=") return cmp >= 0;
-
-    return false;
-  });
+  return Array.from(selectedSet).some((targetStr) =>
+    matchesValueOperator(strVal, op, targetStr)
+  );
 }
 
 type PresetOption = { label: string; clause: string };
@@ -176,7 +200,7 @@ const PRESETS: PresetQuery[] = [
       { label: "ErrorInfo_s", clause: '| where ErrorInfo_s == ""' },
       { label: "originUrl_s", clause: '| where originUrl_s == ""' },
       { label: "routingRuleName_s", clause: '| where routingRuleName_s == ""' },
-      { label: "timeTaken_d", clause: '| where timeTaken_d > ""' },
+      { label: "timeTaken_d", clause: '| where timeTaken_d > 0' },
       { label: "clientCountry_s", clause: '| where clientCountry_s == ""' },
     ],
     projectColumns: ["TimeGenerated", "Resource", "hostName_s", "httpStatusDetails_s", "requestUri_s", "clientIp_s", "socketIp_s", "originName_s", "ErrorInfo_s", "originUrl_s", "routingRuleName_s", "timeTaken_d", "clientCountry_s"],
@@ -1917,7 +1941,7 @@ export function App() {
     updateActiveTab({ maxRows: rows });
   }
   function setWorkspaceId(wsId: string) {
-    updateActiveTab({ workspaceId: wsId });
+    handleWorkspaceSelect(wsId);
   }
   function setResult(res: QueryResponse | null) {
     updateActiveTab({ result: res });
@@ -1996,11 +2020,17 @@ export function App() {
   }, []);
 
   const activeDynamicFieldRef = useRef<HTMLDivElement | null>(null);
+  const filterConditionsRef = useRef<HTMLDivElement | null>(null);
+  const projectColumnsRef = useRef<HTMLDivElement | null>(null);
+  const dynamicFilterSeqRef = useRef<number>(0);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(event.target as Node)) {
-        setOpenDropdown(null);
+      if (filterConditionsRef.current && !filterConditionsRef.current.contains(event.target as Node)) {
+        setOpenDropdown((current) => (current === "conditions" ? null : current));
+      }
+      if (projectColumnsRef.current && !projectColumnsRef.current.contains(event.target as Node)) {
+        setOpenDropdown((current) => (current === "columns" ? null : current));
       }
       if (activeDynamicFieldRef.current && !activeDynamicFieldRef.current.contains(event.target as Node)) {
         setOpenDynamicField(null);
@@ -2015,9 +2045,11 @@ export function App() {
     }
 
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handleClickOutside);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
@@ -2298,12 +2330,26 @@ export function App() {
     }
   }
 
+  function isNumericFieldOrOp(field: string, op: string, val: string): boolean {
+    if (["<", "<=", ">", ">="].includes(op)) return true;
+    const isNumericName = /(_d|_i|_long|_real|_b|_count|_port|Port|Latency|Status|Size|Length|Duration|TimeTaken)$/i.test(field) || /^timeTaken/i.test(field);
+    if (isNumericName) return true;
+    const trimmed = val.trim();
+    if (trimmed !== "" && !isNaN(Number(trimmed)) && !trimmed.startsWith("0x")) return true;
+    return false;
+  }
+
   function buildOptionClause(opt: PresetOption, customOp?: string, customVal?: string): string {
     let defaultValMatch = opt.clause.match(/"([^"]*)"/)?.[1];
     if (opt.clause.includes("between")) {
       const betweenMatch = opt.clause.match(/between\s*\(([^)]+)\)/i);
       if (betweenMatch) {
         defaultValMatch = betweenMatch[1];
+      }
+    } else {
+      const unquotedNumMatch = opt.clause.match(/(==|!=|>=|>|<=|<)\s*([0-9.]+)/);
+      if (unquotedNumMatch) {
+        defaultValMatch = unquotedNumMatch[2];
       }
     }
 
@@ -2313,27 +2359,42 @@ export function App() {
       ? "contains"
       : opt.clause.includes("between")
       ? "between"
+      : opt.clause.includes(">=")
+      ? ">="
+      : opt.clause.includes(">")
+      ? ">"
+      : opt.clause.includes("<=")
+      ? "<="
+      : opt.clause.includes("<")
+      ? "<"
       : opt.clause.includes("!=")
       ? "!="
       : "==";
 
     const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
-    const field = fieldMatch ? fieldMatch[1] : opt.label;
+    const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
 
     const op = customOp || defaultOp;
-    const val = customVal !== undefined ? customVal : (defaultValMatch ?? "");
+    const rawVal = customVal !== undefined ? customVal : (defaultValMatch ?? "");
 
     if (op === "between") {
-      const cleanedVal = val.replace(/^\(|\)$/g, "").trim();
+      const cleanedVal = rawVal.replace(/^\(|\)$/g, "").trim();
       return `| where ${field} between (${cleanedVal || "400 .. 599"})`;
     }
     if (op === "!contains") {
-      return `| where ${field} !contains "${val}"`;
+      return `| where ${field} !contains "${rawVal}"`;
     }
     if (op === "contains") {
-      return `| where ${field} contains "${val}"`;
+      return `| where ${field} contains "${rawVal}"`;
     }
-    return `| where ${field} ${op} "${val}"`;
+
+    const isNumeric = isNumericFieldOrOp(field, op, rawVal);
+    if (isNumeric) {
+      const numericVal = rawVal.trim() !== "" ? rawVal.trim() : "0";
+      return `| where ${field} ${op} ${numericVal}`;
+    }
+
+    return `| where ${field} ${op} "${rawVal}"`;
   }
 
   function handleOptionOperatorChange(opt: PresetOption, newOp: string) {
@@ -2399,10 +2460,12 @@ export function App() {
     
     const targetWs = (targetWorkspaceId || workspaceId).trim();
     const isPlaceholderGuid = /^(11111111|22222222|33333333|44444444|00000000|your_)/i.test(targetWs);
-    if (!targetWs || isPlaceholderGuid) {
-      console.warn("Skipping dynamic filter fetch: workspace ID is empty or set to dummy placeholder.");
+    if (!targetWs || isPlaceholderGuid || targetWs.length < 5) {
+      console.warn("Skipping dynamic filter fetch: workspace ID is empty, placeholder, or too short.");
       return;
     }
+
+    const currentSeq = ++dynamicFilterSeqRef.current;
 
     let token: string | undefined;
     if (isAuthenticated && accounts.length > 0) {
@@ -2423,6 +2486,7 @@ export function App() {
       .trim();
 
     for (let i = 0; i < preset.dynamicFilters.length; i++) {
+      if (dynamicFilterSeqRef.current !== currentSeq) return;
       const filter = preset.dynamicFilters[i];
       try {
         let q = `${cleanBase}\n| where TimeGenerated > ago(24h)`;
@@ -2468,6 +2532,8 @@ export function App() {
           });
         }
 
+        if (dynamicFilterSeqRef.current !== currentSeq) return;
+
         const rawValues = res.tables[0]?.rows.map(r => r[0] as string).filter(Boolean) || [];
         const values = rawValues.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
         setDynamicFilterValues(prev => ({ ...prev, [filter.field]: values }));
@@ -2485,6 +2551,7 @@ export function App() {
     const initialProjects = new Set(preset.projectColumns);
     setPresetProjectColumns(initialProjects);
     setSelectedDynamicFilters({});
+    setDynamicFilterValues({});
     setFilterSearch({});
     setOpenDynamicField(null);
     setQuery(generateQuery(preset, new Set(), initialProjects, {}, {}, {}));
@@ -2492,10 +2559,29 @@ export function App() {
   }
 
   function handleWorkspaceSelect(newWsId: string) {
-    setWorkspaceId(newWsId);
-    if (activePreset) {
-      fetchDynamicFilters(activePreset, newWsId, {});
-    }
+    if (newWsId === workspaceId) return;
+
+    // Clear all tab data (results, active presets, filter conditions, project columns, dynamic filters, errors) for the active tab when selecting a different workspace
+    updateActiveTab({
+      workspaceId: newWsId,
+      result: null,
+      error: null,
+      loading: false,
+      activePreset: null,
+      presetOptions: new Set(),
+      presetProjectColumns: new Set(),
+      selectedDynamicFilters: {},
+      dynamicFilterValues: {},
+      filterSearch: {},
+      optionOperators: {},
+      optionValues: {},
+      customStart: "",
+      customEnd: "",
+      isCustomInputMode: false,
+      query: starterQuery
+    });
+    setOpenDynamicField(null);
+    setOpenDropdown(null);
   }
 
   function toggleDynamicFilterValue(field: string, val: string) {
@@ -3093,7 +3179,7 @@ export function App() {
             {activePreset && (
               <div ref={dropdownContainerRef} style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px", position: "relative", zIndex: 1000 }}>
                 {/* Filter Conditions Multi-Select Dropdown */}
-                <div style={{ position: "relative" }}>
+                <div ref={filterConditionsRef} style={{ position: "relative" }}>
                   <button
                     type="button"
                     className="modal-trigger-btn"
@@ -3260,7 +3346,7 @@ export function App() {
                 </div>
 
                 {/* Project Columns Multi-Select Dropdown */}
-                <div style={{ position: "relative" }}>
+                <div ref={projectColumnsRef} style={{ position: "relative" }}>
                   <button
                     type="button"
                     className="modal-trigger-btn"
@@ -3415,7 +3501,13 @@ export function App() {
         ) : null}
         {loading ? <div className="empty-results">Query is running...</div> : null}
         {result?.tables.map((table) => (
-          <ResultTable key={table.name} table={table} query={query} presetProjectColumns={presetProjectColumns} />
+          <ResultTable
+            key={`${workspaceId}-${table.name}`}
+            table={table}
+            query={query}
+            presetProjectColumns={presetProjectColumns}
+            workspaceId={workspaceId}
+          />
         ))}
       </section>
 
@@ -3532,7 +3624,17 @@ function SegmentedControl({
   );
 }
 
-function ResultTable({ table, query = "", presetProjectColumns }: { table: QueryTable; query?: string; presetProjectColumns?: Set<string> }) {
+function ResultTable({
+  table,
+  query = "",
+  presetProjectColumns,
+  workspaceId
+}: {
+  table: QueryTable;
+  query?: string;
+  presetProjectColumns?: Set<string>;
+  workspaceId?: string;
+}) {
   const [search, setSearch] = useState("");
   const [sortColumnName, setSortColumnName] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
@@ -3718,11 +3820,24 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
   const [summaryScope, setSummaryScope] = useState<"filtered" | "all">("filtered");
   const [summarySelectedColumns, setSummarySelectedColumns] = useState<Set<string>>(new Set());
   const [summarySelectedSubValues, setSummarySelectedSubValues] = useState<Record<string, Set<string>>>({});
+  const [draftSummaryColumns, setDraftSummaryColumns] = useState<Set<string>>(new Set());
+  const [draftSummarySubValues, setDraftSummarySubValues] = useState<Record<string, Set<string>>>({});
+
   const [summarySortColumn, setSummarySortColumn] = useState<string | null>(null);
   const [summarySortDirection, setSummarySortDirection] = useState<"asc" | "desc" | null>(null);
   const [isSummaryDropdownOpen, setIsSummaryDropdownOpen] = useState(false);
   const [summaryHoveredCol, setSummaryHoveredCol] = useState<string | null>(null);
   const summaryDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const draftColsRef = useRef(draftSummaryColumns);
+  draftColsRef.current = draftSummaryColumns;
+  const draftSubRef = useRef(draftSummarySubValues);
+  draftSubRef.current = draftSummarySubValues;
+
+  const commitSummaryDraft = () => {
+    setSummarySelectedColumns(new Set(draftColsRef.current));
+    setSummarySelectedSubValues(draftSubRef.current);
+  };
 
   function handleSummaryHeaderClick(colKey: string) {
     if (summarySortColumn === colKey) {
@@ -3737,12 +3852,27 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
     }
   }
 
+  // Reset table filters and Summarized Column Telemetry when table or workspace changes
+  useEffect(() => {
+    setSearch("");
+    setSelectedValueFilters({});
+    setColumnFilterOperators({});
+    setSummarySelectedColumns(new Set());
+    setSummarySelectedSubValues({});
+    setDraftSummaryColumns(new Set());
+    setDraftSummarySubValues({});
+    setSummarySortColumn(null);
+    setSummarySortDirection(null);
+    setSummaryScope("filtered");
+  }, [table, workspaceId]);
+
   useEffect(() => {
     function handlePointerDown(e: MouseEvent) {
       if (valueFilterRef.current && !valueFilterRef.current.contains(e.target as Node)) {
         setIsValueFilterOpen(false);
       }
       if (summaryDropdownRef.current && !summaryDropdownRef.current.contains(e.target as Node)) {
+        commitSummaryDraft();
         setIsSummaryDropdownOpen(false);
       }
     }
@@ -4084,8 +4214,9 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                           <button
                             type="button"
                             onClick={() => {
+                              const currentOp = columnFilterOperators[hoveredColumn] || "==";
                               const visibleValues = (uniqueColumnValues[hoveredColumn] || []).filter(
-                                (val) => !flyoutSearch || val.toLowerCase().includes(flyoutSearch.toLowerCase())
+                                (val) => matchesValueOperator(val, currentOp, flyoutSearch)
                               );
                               setSelectedValueFilters((prev) => {
                                 const nextSet = new Set(prev[hoveredColumn] || []);
@@ -4165,7 +4296,10 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
 
                     <div className="flyout-values-list">
                       {(uniqueColumnValues[hoveredColumn] || [])
-                        .filter((val) => !flyoutSearch || val.toLowerCase().includes(flyoutSearch.toLowerCase()))
+                        .filter((val) => {
+                          const currentOp = columnFilterOperators[hoveredColumn] || "==";
+                          return matchesValueOperator(val, currentOp, flyoutSearch);
+                        })
                         .map((val) => {
                           const currentSet = selectedValueFilters[hoveredColumn] || new Set();
                           const isChecked = currentSet.has(val);
@@ -4465,8 +4599,15 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                 className="icon-button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsSummaryDropdownOpen(!isSummaryDropdownOpen);
-                  setSummaryHoveredCol(null);
+                  if (!isSummaryDropdownOpen) {
+                    setDraftSummaryColumns(new Set(summarySelectedColumns));
+                    setDraftSummarySubValues(summarySelectedSubValues);
+                    setIsSummaryDropdownOpen(true);
+                    setSummaryHoveredCol(null);
+                  } else {
+                    commitSummaryDraft();
+                    setIsSummaryDropdownOpen(false);
+                  }
                 }}
                 style={{
                   width: "auto",
@@ -4477,22 +4618,28 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
-                  background: summarySelectedColumns.size > 0 ? "rgba(16, 185, 129, 0.25)" : "rgba(15, 23, 42, 0.6)",
-                  border: `1px solid ${summarySelectedColumns.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                  color: summarySelectedColumns.size > 0 ? "#34d399" : "#94a3b8",
+                  background: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "rgba(16, 185, 129, 0.25)" : "rgba(15, 23, 42, 0.6)",
+                  border: `1px solid ${(isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
+                  color: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#34d399" : "#94a3b8",
                   borderRadius: "6px"
                 }}
               >
                 <SlidersHorizontal size={14} color="#10b981" />
                 <span>
                   Filter Columns & Values{" "}
-                  {summarySelectedColumns.size > 0 ? `(${summarySelectedColumns.size})` : "(All)"}
+                  {(isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0
+                    ? `(${isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size})`
+                    : "(All)"}
                 </span>
                 {isSummaryDropdownOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
 
               {isSummaryDropdownOpen && (
-                <div className="cascading-menu-container left-aligned" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="cascading-menu-container left-aligned"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseLeave={() => commitSummaryDraft()}
+                >
                   {/* Level 1: Columns List */}
                   <div className="cascading-menu-left">
                     <div className="cascading-menu-title">
@@ -4502,7 +4649,7 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                           type="button"
                           className="clear-all-link"
                           onClick={() => {
-                            setSummarySelectedColumns(new Set(table.columns.map((c) => c.name)));
+                            setDraftSummaryColumns(new Set(table.columns.map((c) => c.name)));
                           }}
                         >
                           Select All
@@ -4511,8 +4658,8 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                           type="button"
                           className="clear-all-link"
                           onClick={() => {
-                            setSummarySelectedColumns(new Set());
-                            setSummarySelectedSubValues({});
+                            setDraftSummaryColumns(new Set());
+                            setDraftSummarySubValues({});
                           }}
                         >
                           Clear
@@ -4521,8 +4668,8 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                     </div>
                     <div className="cascading-column-list">
                       {table.columns.map((col) => {
-                        const isColChecked = summarySelectedColumns.has(col.name);
-                        const subCount = summarySelectedSubValues[col.name]?.size || 0;
+                        const isColChecked = draftSummaryColumns.has(col.name);
+                        const subCount = draftSummarySubValues[col.name]?.size || 0;
                         const isHovered = summaryHoveredCol === col.name;
 
                         return (
@@ -4532,10 +4679,14 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                             onMouseEnter={() => setSummaryHoveredCol(col.name)}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSummarySelectedColumns((prev) => {
+                              setDraftSummaryColumns((prev) => {
                                 const next = new Set(prev);
-                                if (next.has(col.name)) next.delete(col.name);
-                                else next.add(col.name);
+                                if (next.has(col.name)) {
+                                  next.delete(col.name);
+                                  setDraftSummarySubValues((subPrev) => ({ ...subPrev, [col.name]: new Set() }));
+                                } else {
+                                  next.add(col.name);
+                                }
                                 return next;
                               });
                             }}
@@ -4566,11 +4717,13 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                             type="button"
                             onClick={() => {
                               const values = uniqueColumnValues[summaryHoveredCol] || [];
-                              setSummarySelectedSubValues((prev) => ({
+                              setDraftSummarySubValues((prev) => ({
                                 ...prev,
                                 [summaryHoveredCol]: new Set(values)
                               }));
-                              setSummarySelectedColumns((prev) => new Set(prev).add(summaryHoveredCol));
+                              if (values.length > 0) {
+                                setDraftSummaryColumns((prev) => new Set(prev).add(summaryHoveredCol));
+                              }
                             }}
                           >
                             Select All
@@ -4578,10 +4731,15 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                           <button
                             type="button"
                             onClick={() => {
-                              setSummarySelectedSubValues((prev) => ({
+                              setDraftSummarySubValues((prev) => ({
                                 ...prev,
                                 [summaryHoveredCol]: new Set()
                               }));
+                              setDraftSummaryColumns((prev) => {
+                                const next = new Set(prev);
+                                next.delete(summaryHoveredCol);
+                                return next;
+                              });
                             }}
                           >
                             Deselect All
@@ -4591,7 +4749,7 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
 
                       <div className="flyout-values-list">
                         {(uniqueColumnValues[summaryHoveredCol] || []).map((val) => {
-                          const currentSet = summarySelectedSubValues[summaryHoveredCol] || new Set();
+                          const currentSet = draftSummarySubValues[summaryHoveredCol] || new Set();
                           const isChecked = currentSet.has(val);
 
                           return (
@@ -4600,13 +4758,24 @@ function ResultTable({ table, query = "", presetProjectColumns }: { table: Query
                               className={`flyout-value-item ${isChecked ? "is-selected" : ""}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSummarySelectedSubValues((prev) => {
-                                  const nextSet = new Set(prev[summaryHoveredCol] || []);
-                                  if (nextSet.has(val)) nextSet.delete(val);
-                                  else nextSet.add(val);
-                                  return { ...prev, [summaryHoveredCol]: nextSet };
+                                const nextSet = new Set(draftSummarySubValues[summaryHoveredCol] || []);
+                                if (nextSet.has(val)) nextSet.delete(val);
+                                else nextSet.add(val);
+
+                                setDraftSummarySubValues((prev) => ({
+                                  ...prev,
+                                  [summaryHoveredCol]: nextSet
+                                }));
+
+                                setDraftSummaryColumns((prev) => {
+                                  const nextCols = new Set(prev);
+                                  if (nextSet.size > 0) {
+                                    nextCols.add(summaryHoveredCol);
+                                  } else {
+                                    nextCols.delete(summaryHoveredCol);
+                                  }
+                                  return nextCols;
                                 });
-                                setSummarySelectedColumns((prev) => new Set(prev).add(summaryHoveredCol));
                               }}
                             >
                               <input

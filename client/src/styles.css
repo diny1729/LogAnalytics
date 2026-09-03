@@ -1623,7 +1623,7 @@ tr:hover td {
 
 .cascading-menu-left {
   width: 220px;
-  max-height: 400px;
+  height: 380px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(16, 185, 129, 0.2);
@@ -1726,7 +1726,7 @@ tr:hover td {
 
 .cascading-menu-right {
   width: 260px;
-  max-height: 400px;
+  height: 380px;
   display: flex;
   flex-direction: column;
   background: rgba(8, 36, 48, 0.98);
