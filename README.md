@@ -139,6 +139,32 @@ Configurable via environment variables or Kubernetes secrets:
 - Service Principal (SPN): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
 - Azure OpenAI Integration: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
 
+### Configuring Multiple Azure Subscriptions & Workspaces (`VITE_WORKSPACES`)
+
+You can define any number of Log Analytics workspaces across multiple Azure Subscriptions in `.env` (or Kubernetes manifests). The application parses them and presents a two-level selection GUI (Subscription filter + Workspace selector with subscription badges).
+
+**Syntax**:
+```env
+VITE_WORKSPACES=SubscriptionName/WorkspaceName:WorkspaceCustomerId,SubscriptionName/WorkspaceName:WorkspaceCustomerId
+```
+
+**How to add subscriptions and workspaces**:
+1. **Add a single workspace to a subscription**:
+   ```env
+   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111
+   ```
+2. **Add multiple workspaces under the SAME subscription**:
+   ```env
+   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111,Production/WestEurope-Logs:22222222-2222-2222-2222-222222222222
+   ```
+3. **Add a NEW subscription with its workspace**:
+   ```env
+   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111,Staging/Stage-Logs:33333333-3333-3333-3333-333333333333,Security/Sentinel-Logs:44444444-4444-4444-4444-444444444444
+   ```
+
+> **Where to find Workspace Customer ID**:
+> In Azure Portal, open your Log Analytics Workspace > **Overview** blade > copy the **Workspace ID** (GUID format, e.g., `11111111-1111-1111-1111-111111111111`).
+
 ---
 
 ## Azure AD Authentication & Security Group Setup Guide
