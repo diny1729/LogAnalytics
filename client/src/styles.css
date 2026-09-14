@@ -275,6 +275,8 @@ p {
 
 /* Compact Workspace & Subscription Controls Toolbar Bar (Filter Values Style) */
 .workspace-controls-bar {
+  position: relative;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: space-between;

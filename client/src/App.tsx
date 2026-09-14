@@ -1257,7 +1257,7 @@ function KqlCodeEditor({
   const lines = query.split("\n");
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", zIndex: 1 }}>
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -1582,7 +1582,7 @@ function GraphicalSubscriptionSelect({
   }, [subscriptions, search]);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: "160px" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "160px", zIndex: isOpen ? 10005 : 1 }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -1795,7 +1795,7 @@ function GraphicalWorkspaceSelect({
   }, [subscriptionWorkspaces, search]);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: "200px" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "200px", zIndex: isOpen ? 10005 : 1 }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -1999,7 +1999,7 @@ function GraphicalPresetSelect({
   const activeColor = activePreset ? presetColors[activePreset.id]?.bg || "#38bdf8" : "#38bdf8";
 
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: "190px" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "190px", zIndex: isOpen ? 10005 : 1 }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -2038,7 +2038,8 @@ function GraphicalPresetSelect({
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
-            left: 0,
+            right: 0,
+            left: "auto",
             minWidth: "280px",
             zIndex: 99999,
             background: "rgba(4, 18, 27, 0.98)",
@@ -3361,7 +3362,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="workspace-controls-bar">
+          <div className="workspace-controls-bar" style={{ position: "relative", zIndex: 10000 }}>
             {/* Left Section: Azure Subscription & Workspace */}
             <div className="workspace-controls-group">
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -3491,7 +3492,7 @@ export function App() {
             </p>
           )}
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", marginBottom: "16px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", marginBottom: "16px", position: "relative", zIndex: 1 }}>
             <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#38bdf8" }}>Quick Switch:</span>
             {sortedPresets.map((preset) => {
               const isActive = activePreset?.id === preset.id;
