@@ -1582,36 +1582,39 @@ function GraphicalSubscriptionSelect({
   }, [subscriptions, search]);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: "160px", flex: "1 1 180px" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "160px" }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         title="Filter workspaces by Azure Subscription"
         style={{
-          width: "100%",
-          padding: "8px 12px",
-          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          width: "auto",
+          minWidth: "170px",
+          height: "34px",
+          padding: "5px 12px",
+          background: "rgba(15, 23, 42, 0.7)",
           border: `1px solid ${isOpen ? "#38bdf8" : "rgba(56, 189, 248, 0.35)"}`,
-          borderRadius: "8px",
+          borderRadius: "6px",
           color: selectedSubscription !== "ALL" ? "#38bdf8" : "#94a3b8",
-          fontSize: "13px",
+          fontSize: "12px",
           fontWeight: 600,
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "8px",
           cursor: "pointer",
           boxShadow: isOpen ? "0 0 15px rgba(56, 189, 248, 0.25)" : "none",
           transition: "all 0.2s ease"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-          <span style={{ fontSize: "14px" }}>💳</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
+          <span style={{ fontSize: "13px" }}>💳</span>
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
             {displayText}
           </span>
         </div>
         <ChevronDown
-          size={14}
+          size={13}
           color="#38bdf8"
           style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}
         />
@@ -1623,10 +1626,9 @@ function GraphicalSubscriptionSelect({
             position: "absolute",
             top: "calc(100% + 6px)",
             left: 0,
-            right: 0,
             minWidth: "260px",
-            zIndex: 9999,
-            background: "rgba(4, 18, 27, 0.96)",
+            zIndex: 99999,
+            background: "rgba(4, 18, 27, 0.98)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             border: "1px solid rgba(56, 189, 248, 0.4)",
@@ -1793,34 +1795,38 @@ function GraphicalWorkspaceSelect({
   }, [subscriptionWorkspaces, search]);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "200px" }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: "100%",
-          padding: "8px 12px",
-          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          width: "auto",
+          minWidth: "210px",
+          maxWidth: "340px",
+          height: "34px",
+          padding: "5px 12px",
+          background: "rgba(15, 23, 42, 0.7)",
           border: `1px solid ${isOpen ? "#34d399" : "rgba(45, 212, 191, 0.35)"}`,
-          borderRadius: "8px",
+          borderRadius: "6px",
           color: selectedWs ? "#34d399" : "#94a3b8",
-          fontSize: "13px",
+          fontSize: "12px",
           fontWeight: 600,
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "8px",
           cursor: "pointer",
           boxShadow: isOpen ? "0 0 15px rgba(52, 211, 153, 0.25)" : "none",
           transition: "all 0.2s ease"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-          <span style={{ fontSize: "14px" }}>🏢</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
+          <span style={{ fontSize: "13px" }}>🏢</span>
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
             {selectedWs ? `${selectedWs.name} (${selectedWs.customerId.slice(0, 8)}...)` : `-- Select a Workspace (${subscriptionWorkspaces.length}) --`}
           </span>
         </div>
-        <ChevronDown size={14} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+        <ChevronDown size={13} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
 
       {isOpen && (
@@ -1829,9 +1835,9 @@ function GraphicalWorkspaceSelect({
             position: "absolute",
             top: "calc(100% + 6px)",
             left: 0,
-            right: 0,
-            zIndex: 9999,
-            background: "rgba(4, 18, 27, 0.96)",
+            minWidth: "300px",
+            zIndex: 99999,
+            background: "rgba(4, 18, 27, 0.98)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             border: "1px solid rgba(52, 211, 153, 0.4)",
@@ -1993,34 +1999,38 @@ function GraphicalPresetSelect({
   const activeColor = activePreset ? presetColors[activePreset.id]?.bg || "#38bdf8" : "#38bdf8";
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+    <div ref={containerRef} style={{ position: "relative", minWidth: "190px" }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: "100%",
-          padding: "8px 12px",
-          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          width: "auto",
+          minWidth: "190px",
+          maxWidth: "300px",
+          height: "34px",
+          padding: "5px 12px",
+          background: "rgba(15, 23, 42, 0.7)",
           border: `1px solid ${isOpen ? activeColor : "rgba(45, 212, 191, 0.35)"}`,
-          borderRadius: "8px",
+          borderRadius: "6px",
           color: activePreset ? "#f8fafc" : "#94a3b8",
-          fontSize: "13px",
+          fontSize: "12px",
           fontWeight: 600,
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "8px",
           cursor: "pointer",
           boxShadow: isOpen ? `0 0 15px ${activeColor}44` : "none",
           transition: "all 0.2s ease"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-          <span style={{ fontSize: "14px" }}>⚡</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
+          <span style={{ fontSize: "13px" }}>⚡</span>
           <span style={{ fontWeight: 700, color: activePreset ? activeColor : "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {activePreset ? activePreset.name : `-- Select a Log Preset (${presets.length}) --`}
           </span>
         </div>
-        <ChevronDown size={14} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+        <ChevronDown size={13} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
 
       {isOpen && (
@@ -2029,9 +2039,9 @@ function GraphicalPresetSelect({
             position: "absolute",
             top: "calc(100% + 6px)",
             left: 0,
-            right: 0,
-            zIndex: 9999,
-            background: "rgba(4, 18, 27, 0.96)",
+            minWidth: "280px",
+            zIndex: 99999,
+            background: "rgba(4, 18, 27, 0.98)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             border: "1px solid rgba(56, 189, 248, 0.4)",
@@ -3351,100 +3361,135 @@ export function App() {
             </div>
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", marginBottom: "16px" }}>
-            <div className="dynamic-filter-card" style={{ flex: "1 1 540px", maxWidth: "620px" }}>
-              <div className="dynamic-filter-header">
-                <span className="dynamic-filter-label" style={{ color: "#38bdf8" }}>🏢 Azure Subscription & Workspace</span>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <span className="filter-count">
-                    {uniqueSubscriptions.length} {uniqueSubscriptions.length === 1 ? "subscription" : "subscriptions"} · {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
-                  </span>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => setIsCustomInputMode(!isCustomInputMode)}
-                    style={{ width: "auto", padding: "2px 8px", height: "24px", fontSize: "11px", border: "1px solid rgba(45, 212, 191, 0.3)" }}
-                    title="Toggle manual workspace ID input"
-                  >
-                    {isCustomInputMode ? "📋 Dropdown" : "✏️ Manual"}
-                  </button>
-                  {isAuthenticated && (
-                    <button 
-                      type="button"
-                      className="icon-button" 
-                      onClick={loadWorkspaces} 
-                      disabled={fetchingWorkspaces}
-                      style={{ width: "auto", padding: "2px 6px", height: "24px", fontSize: "11px" }}
-                      title="Refresh workspaces"
-                    >
-                      <RefreshCw size={12} className={fetchingWorkspaces ? "spinning" : ""} />
-                    </button>
-                  )}
-                </div>
+          <div className="workspace-controls-bar">
+            {/* Left Section: Azure Subscription & Workspace */}
+            <div className="workspace-controls-group">
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span className="dynamic-filter-label" style={{ color: "#38bdf8", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  🏢 Azure Subscription & Workspace
+                </span>
+                <span className="filter-count" style={{ fontSize: "11px", color: "#99f6e4", background: "rgba(45, 212, 191, 0.12)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(45, 212, 191, 0.25)" }}>
+                  {uniqueSubscriptions.length} {uniqueSubscriptions.length === 1 ? "subscription" : "subscriptions"} · {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
+                </span>
               </div>
 
-              <div className="dynamic-filter-inputs" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {isCustomInputMode ? (
+              {isCustomInputMode ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <input
                     className="filter-search-field"
-                    style={{ paddingLeft: "10px !important", height: "32px !important", width: "100%" }}
+                    style={{
+                      padding: "4px 10px",
+                      height: "34px",
+                      minWidth: "260px",
+                      background: "rgba(15, 23, 42, 0.7)",
+                      border: "1px solid rgba(45, 212, 191, 0.4)",
+                      borderRadius: "6px",
+                      color: "#f8fafc",
+                      fontSize: "12px"
+                    }}
                     value={workspaceId}
                     onChange={(event) => handleWorkspaceSelect(event.target.value)}
                     placeholder="Enter or paste Workspace ID GUID..."
                   />
-                ) : (
-                  <>
-                    <GraphicalSubscriptionSelect
-                      subscriptions={uniqueSubscriptions}
-                      selectedSubscription={selectedSubscription}
-                      totalWorkspacesCount={workspaces.length}
-                      onSelect={(sub) => {
-                        setSelectedSubscription(sub);
-                        if (sub !== "ALL") {
-                          const matches = workspaces.filter(w => w.subscriptionName === sub || w.subscriptionId === sub);
-                          if (matches.length > 0 && !matches.some(w => w.customerId === workspaceId)) {
-                            handleWorkspaceSelect(matches[0].customerId);
-                          }
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <GraphicalSubscriptionSelect
+                    subscriptions={uniqueSubscriptions}
+                    selectedSubscription={selectedSubscription}
+                    totalWorkspacesCount={workspaces.length}
+                    onSelect={(sub) => {
+                      setSelectedSubscription(sub);
+                      if (sub !== "ALL") {
+                        const matches = workspaces.filter(w => w.subscriptionName === sub || w.subscriptionId === sub);
+                        if (matches.length > 0 && !matches.some(w => w.customerId === workspaceId)) {
+                          handleWorkspaceSelect(matches[0].customerId);
                         }
-                      }}
-                    />
-                    <div style={{ flex: "2 1 240px", minWidth: "220px" }}>
-                      <GraphicalWorkspaceSelect
-                        workspaces={workspaces}
-                        workspaceId={workspaceId}
-                        selectedSubscription={selectedSubscription}
-                        onSelect={(id) => handleWorkspaceSelect(id)}
-                        onManualClick={() => setIsCustomInputMode(true)}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
+                      }
+                    }}
+                  />
+                  <GraphicalWorkspaceSelect
+                    workspaces={workspaces}
+                    workspaceId={workspaceId}
+                    selectedSubscription={selectedSubscription}
+                    onSelect={(id) => handleWorkspaceSelect(id)}
+                    onManualClick={() => setIsCustomInputMode(true)}
+                  />
+                </div>
+              )}
 
-              {workspaces.length === 0 && !fetchingWorkspaces && (
-                <p style={{ color: "#94a3b8", fontSize: "11px", margin: "6px 0 0 0" }}>
-                  Configure <code>VITE_WORKSPACES=Subscription/Workspace:GUID</code> in <code>.env</code> or click "Manual" to enter a workspace ID directly.
-                </p>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setIsCustomInputMode(!isCustomInputMode)}
+                style={{
+                  width: "auto",
+                  padding: "5px 10px",
+                  height: "34px",
+                  fontSize: "11px",
+                  border: "1px solid rgba(45, 212, 191, 0.3)",
+                  borderRadius: "6px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  color: "#99f6e4",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  cursor: "pointer"
+                }}
+                title="Toggle manual workspace ID input"
+              >
+                {isCustomInputMode ? "📋 Dropdown" : "✏️ Manual"}
+              </button>
+
+              {isAuthenticated && (
+                <button 
+                  type="button"
+                  className="icon-button" 
+                  onClick={loadWorkspaces} 
+                  disabled={fetchingWorkspaces}
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    padding: 0,
+                    fontSize: "11px",
+                    borderRadius: "6px",
+                    background: "rgba(15, 23, 42, 0.6)",
+                    border: "1px solid rgba(45, 212, 191, 0.3)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                  title="Refresh workspaces"
+                >
+                  <RefreshCw size={12} className={fetchingWorkspaces ? "spinning" : ""} />
+                </button>
               )}
             </div>
 
-            <div className="dynamic-filter-card" style={{ flex: "1 1 320px", maxWidth: "440px" }}>
-              <div className="dynamic-filter-header">
-                <span className="dynamic-filter-label" style={{ color: "#38bdf8" }}>⚡ Log Presets</span>
-                <span className="filter-count">
+            {/* Right Section: Log Presets */}
+            <div className="workspace-controls-group">
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span className="dynamic-filter-label" style={{ color: "#38bdf8", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  ⚡ Log Presets
+                </span>
+                <span className="filter-count" style={{ fontSize: "11px", color: "#99f6e4", background: "rgba(56, 189, 248, 0.12)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(56, 189, 248, 0.25)" }}>
                   {sortedPresets.length} presets
                 </span>
               </div>
-              <div className="dynamic-filter-inputs">
-                <GraphicalPresetSelect
-                  presets={sortedPresets}
-                  activePreset={activePreset}
-                  presetColors={presetColors}
-                  onSelect={(preset) => applyPreset(preset)}
-                />
-              </div>
+              <GraphicalPresetSelect
+                presets={sortedPresets}
+                activePreset={activePreset}
+                presetColors={presetColors}
+                onSelect={(preset) => applyPreset(preset)}
+              />
             </div>
           </div>
+
+          {workspaces.length === 0 && !fetchingWorkspaces && (
+            <p style={{ color: "#94a3b8", fontSize: "11px", margin: "-6px 0 12px 4px" }}>
+              Configure <code>VITE_WORKSPACES=Subscription/Workspace:GUID</code> in <code>.env</code> or click "Manual" to enter a workspace ID directly.
+            </p>
+          )}
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", marginBottom: "16px" }}>
             <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#38bdf8" }}>Quick Switch:</span>

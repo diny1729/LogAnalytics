@@ -273,6 +273,29 @@ p {
   margin-top: 6px;
 }
 
+/* Compact Workspace & Subscription Controls Toolbar Bar (Filter Values Style) */
+.workspace-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background: rgba(6, 32, 44, 0.75);
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.workspace-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* Dynamic Filter Cards & Search Input */
 .dynamic-filter-card {
   display: flex;
