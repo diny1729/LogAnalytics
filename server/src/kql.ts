@@ -135,3 +135,61 @@ function stableFilterId(expression: string, offset: number): string {
 function isBoundary(value: string | undefined): boolean {
   return value === undefined || !/[A-Za-z0-9_]/.test(value);
 }
+
+export function ensureQueryRowLimit(query: string, maxRows: number): string {
+  if (!maxRows || maxRows <= 0) return query;
+
+  const lines = query.split("\n");
+
+  // Check if there is an existing take or limit clause (e.g., | take 5000 or | limit 1000)
+  let takeIndex = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^\s*\|\s*(take|limit)\s+\d+\s*(;)?\s*(\/\/.*)?$/i.test(lines[i].trim())) {
+      takeIndex = i;
+      break;
+    }
+  }
+
+  if (takeIndex !== -1) {
+    lines[takeIndex] = lines[takeIndex].replace(
+      /\|\s*(take|limit)\s+\d+/i,
+      `| take ${maxRows}`
+    );
+    return lines.join("\n");
+  }
+
+  // Check if there is a render clause (e.g. | render barchart)
+  // In KQL, render must be the final operator in the pipeline
+  const renderIndex = lines.findIndex((l) =>
+    /^\s*\|\s*render\b/i.test(l.trim())
+  );
+
+  if (renderIndex !== -1) {
+    lines.splice(renderIndex, 0, `| take ${maxRows}`);
+    return lines.join("\n");
+  }
+
+  // Find the last non-empty, non-comment line
+  let lastActiveIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed && !trimmed.startsWith("//")) {
+      lastActiveIdx = i;
+      break;
+    }
+  }
+
+  if (lastActiveIdx !== -1) {
+    const lastLine = lines[lastActiveIdx];
+    if (lastLine.trim().endsWith(";")) {
+      lines[lastActiveIdx] = lastLine.replace(/;\s*$/, "");
+      lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows};`);
+    } else {
+      lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows}`);
+    }
+    return lines.join("\n");
+  }
+
+  return `${query}\n| take ${maxRows}`;
+}
+

@@ -11,6 +11,7 @@ import {
   type LogsTable
 } from "@azure/monitor-query-logs";
 import { config } from "./config.js";
+import { ensureQueryRowLimit } from "./kql.js";
 import type { QueryResponse, QueryTable } from "./types.js";
 
 function createAzureCredential(): TokenCredential {
@@ -71,8 +72,10 @@ export async function queryWorkspaceLogs(args: {
     config.QUERY_MAX_ROWS
   );
 
+  const queryWithLimit = ensureQueryRowLimit(args.query, effectiveMaxRows);
+
   try {
-    const result = await queryClient.queryWorkspace(args.workspaceId, args.query, {
+    const result = await queryClient.queryWorkspace(args.workspaceId, queryWithLimit, {
       duration: args.timespan
     }, {
       serverTimeoutInSeconds: Math.ceil(config.QUERY_TIMEOUT_MS / 1000),
