@@ -17,7 +17,7 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value === "true"),
   QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
-  QUERY_MAX_ROWS: z.coerce.number().int().positive().max(50000).default(5000),
+  QUERY_MAX_ROWS: z.coerce.number().int().positive().max(50000).default(50000),
   QUERY_MAX_LENGTH: z.coerce.number().int().positive().max(100000).default(20000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),

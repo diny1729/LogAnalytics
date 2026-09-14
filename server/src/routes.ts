@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { applyFilterSelections, assertSafeKql, parseFilters } from "./kql.js";
 import { queryWorkspaceLogs } from "./logAnalytics.js";
 import { generateChatResponse } from "./chat.js";
+import { parseWorkspaceEntries } from "./workspaceConfig.js";
 
 const router = Router();
 
@@ -34,32 +35,19 @@ router.get("/health", (_request, response) => {
   });
 });
 
+
+
 router.get("/workspaces", (_request, response) => {
   const envWorkspaces = process.env.VITE_WORKSPACES || config.VITE_WORKSPACES || "";
-  const list: Array<{ id: string; name: string; customerId: string }> = [];
-
-  if (envWorkspaces.trim()) {
-    envWorkspaces.split(",").forEach((entry: string) => {
-      const parts = entry.split(":");
-      if (parts.length >= 2) {
-        const name = parts[0].trim();
-        const customerId = parts.slice(1).join(":").trim();
-        if (name && customerId) {
-          list.push({ id: customerId, name, customerId });
-        }
-      } else if (entry.trim()) {
-        const val = entry.trim();
-        list.push({ id: val, name: `Workspace (${val.substring(0, 8)}...)`, customerId: val });
-      }
-    });
-  }
+  const list = parseWorkspaceEntries(envWorkspaces);
 
   const defaultWs = process.env.LOG_ANALYTICS_WORKSPACE_ID || config.LOG_ANALYTICS_WORKSPACE_ID;
   if (defaultWs && defaultWs.trim() && !list.some(w => w.customerId === defaultWs.trim())) {
     list.unshift({
       id: defaultWs.trim(),
       name: "Default Workspace",
-      customerId: defaultWs.trim()
+      customerId: defaultWs.trim(),
+      subscriptionName: "Default Subscription"
     });
   }
 

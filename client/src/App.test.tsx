@@ -8,6 +8,19 @@ vi.mock("@azure/msal-react", () => ({
   useIsAuthenticated: vi.fn()
 }));
 
+vi.mock("./api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api")>();
+  return {
+    ...actual,
+    fetchUserWorkspaces: vi.fn().mockResolvedValue([]),
+    fetchWorkspacesFromServer: vi.fn().mockResolvedValue([]),
+    runQuery: vi.fn().mockResolvedValue({
+      tables: [],
+      effectiveQuery: ""
+    })
+  };
+});
+
 describe("App", () => {
   beforeEach(() => {
     vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
@@ -150,6 +163,153 @@ describe("App", () => {
 
     // Search columns input should no longer be visible (minimized)
     expect(screen.queryByPlaceholderText(/Search columns.../i)).not.toBeInTheDocument();
+  });
+
+  it("preserves manual filters in KQL Code Editor when selecting filter conditions", async () => {
+    render(<App />);
+
+    // Click preset "AFD Access Log"
+    const presetBtn = screen.getByRole("button", { name: /AFD Access Log/i });
+    fireEvent.click(presetBtn);
+
+    const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    expect(textarea).toBeInTheDocument();
+
+    // Manually add a new filter in the KQL Code Editor
+    const originalQuery = textarea.value;
+    const manualFilter = '| where destinationPort_d == 443';
+    fireEvent.change(textarea, { target: { value: `${originalQuery}\n${manualFilter}` } });
+
+    expect(textarea.value).toContain(manualFilter);
+
+    // Open Filter Conditions dropdown
+    const filterConditionsBtn = screen.getByText(/Filter Conditions/i);
+    fireEvent.click(filterConditionsBtn);
+
+    // Toggle timeTaken_d condition
+    const timeTakenLabel = screen.getByText("timeTaken_d");
+    fireEvent.click(timeTakenLabel);
+
+    // Verify the manual filter is still preserved AND the new condition is added!
+    expect(textarea.value).toContain(manualFilter);
+    expect(textarea.value).toContain("| where timeTaken_d > 0");
+
+    // Toggle timeTaken_d condition off
+    fireEvent.click(timeTakenLabel);
+
+    // Verify manual filter is STILL preserved!
+    expect(textarea.value).toContain(manualFilter);
+    expect(textarea.value).not.toContain("| where timeTaken_d > 0");
+  });
+
+  it("defaults Primary Result time format to Local Time", async () => {
+    const apiModule = await import("./api");
+    vi.spyOn(apiModule, "runQuery").mockResolvedValue({
+      tables: [
+        {
+          name: "PrimaryResult",
+          columns: [
+            { name: "TimeGenerated", type: "datetime" },
+            { name: "Resource", type: "string" }
+          ],
+          rows: [
+            ["2026-07-16T02:18:57Z", "my-resource"]
+          ]
+        }
+      ],
+      effectiveQuery: "test"
+    });
+
+    render(<App />);
+
+    // Click Run Query
+    const runBtn = screen.getByRole("button", { name: /Run Query/i });
+    fireEvent.click(runBtn);
+
+    // Wait for the results table to appear
+    await waitFor(() => {
+      expect(screen.getByText("PrimaryResult")).toBeInTheDocument();
+    });
+
+    // Verify the Local Time toggle button shows "Local Time" by default
+    expect(screen.getByTitle("Toggle timezone")).toHaveTextContent("Local Time");
+
+    // Verify that the formatted timestamp matches the local time string
+    const expectedLocal = new Date("2026-07-16T02:18:57Z").toLocaleString();
+    expect(screen.getByRole("cell", { name: expectedLocal })).toBeInTheDocument();
+  });
+
+  it("supports multiple subscriptions with filtering and badges", async () => {
+    vi.stubEnv(
+      "VITE_WORKSPACES",
+      "Production/Prod Logs:11111111-1111-1111-1111-111111111111,Staging/Stage Logs:22222222-2222-2222-2222-222222222222"
+    );
+
+    render(<App />);
+
+    // Header should show subscriptions count and workspaces count
+    expect(screen.getByText(/Azure Subscription & Workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 subscriptions · 2 workspaces/i)).toBeInTheDocument();
+
+    // The subscription dropdown trigger should display "All Subscriptions (2)"
+    const subTrigger = screen.getByTitle("Filter workspaces by Azure Subscription");
+    expect(subTrigger).toHaveTextContent("All Subscriptions (2)");
+
+    // Open subscription dropdown
+    fireEvent.click(subTrigger);
+    expect(screen.getByText(/Production/i)).toBeInTheDocument();
+    expect(screen.getByText(/Staging/i)).toBeInTheDocument();
+
+    // Select "Production" subscription
+    fireEvent.click(screen.getByText(/Production/i));
+    expect(subTrigger).toHaveTextContent("Production");
+
+    // Click to open workspace dropdown
+    const wsTrigger = screen.getByText(/Prod Logs/i);
+    fireEvent.click(wsTrigger);
+
+    // Only Prod Logs should be listed in the dropdown, not Stage Logs
+    expect(screen.getByText(/🏢 Prod Logs/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Stage Logs/i)).not.toBeInTheDocument();
+
+    // Close workspace dropdown
+    fireEvent.mouseDown(document.body);
+
+    // Switch back to "All Subscriptions"
+    fireEvent.click(subTrigger);
+    fireEvent.click(screen.getByText("Show workspaces across all subscriptions"));
+    expect(subTrigger).toHaveTextContent("All Subscriptions (2)");
+
+    // Close subscription dropdown
+    fireEvent.mouseDown(document.body);
+
+    // Both should now be available in workspace dropdown
+    fireEvent.click(wsTrigger);
+    expect(screen.getByText(/🏢 Prod Logs/i)).toBeInTheDocument();
+    expect(screen.getByText(/🏢 Stage Logs/i)).toBeInTheDocument();
+  });
+
+  it("supports creating new tabs with inherited subscription context", async () => {
+    vi.stubEnv(
+      "VITE_WORKSPACES",
+      "Production/Prod Logs:11111111-1111-1111-1111-111111111111,Staging/Stage Logs:22222222-2222-2222-2222-222222222222"
+    );
+
+    render(<App />);
+
+    // Filter to Staging in tab 1
+    const subTrigger = screen.getByTitle("Filter workspaces by Azure Subscription");
+    fireEvent.click(subTrigger);
+    fireEvent.click(screen.getByText(/Staging/i));
+    expect(subTrigger).toHaveTextContent("Staging");
+
+    // Click + button to add tab
+    const addTabBtn = screen.getByTitle("Open New Query Tab");
+    fireEvent.click(addTabBtn);
+
+    // Tab 2 should be active and inherit the Staging subscription context
+    expect(screen.getByText("Query 2")).toBeInTheDocument();
+    expect(screen.getByTitle("Filter workspaces by Azure Subscription")).toHaveTextContent("Staging");
   });
 });
 

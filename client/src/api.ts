@@ -110,41 +110,92 @@ export type AzureWorkspace = {
   id: string;
   name: string;
   customerId: string; // The UUID used for Log Analytics querying
+  subscriptionId?: string;
+  subscriptionName?: string;
+  resourceGroup?: string;
 };
 
 export async function fetchUserWorkspaces(accessToken: string): Promise<AzureWorkspace[]> {
   const url = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01";
   
+  // Join Resources with ResourceContainers to resolve human-readable subscription names across all subscriptions
   const query = `
     Resources
     | where type =~ 'microsoft.operationalinsights/workspaces'
-    | project id, name, customerId = properties.customerId
+    | project id, name, customerId = tostring(properties.customerId), subscriptionId, resourceGroup
+    | join kind=leftouter (
+        ResourceContainers
+        | where type =~ 'microsoft.resources/subscriptions'
+        | project subscriptionId, subscriptionName = name
+    ) on subscriptionId
+    | project id, name, customerId, subscriptionId, subscriptionName = coalesce(subscriptionName, subscriptionId), resourceGroup
   `;
 
-  const response = await fetch(url, {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query,
+        options: {
+          $skip: 0,
+          $top: 500
+        }
+      })
+    });
+
+    const data = await response.json();
+    if (response.ok && data.data && Array.isArray(data.data)) {
+      return data.data.map((row: any) => ({
+        id: row.id || row[0],
+        name: row.name || row[1],
+        customerId: row.customerId || row[2],
+        subscriptionId: row.subscriptionId || row[3] || undefined,
+        subscriptionName: row.subscriptionName || row[4] || undefined,
+        resourceGroup: row.resourceGroup || row[5] || undefined
+      }));
+    }
+  } catch (e) {
+    console.warn("Resource Graph query with subscriptions failed, falling back to basic query:", e);
+  }
+
+  // Fallback to simpler query if ResourceContainers join failed
+  const fallbackQuery = `
+    Resources
+    | where type =~ 'microsoft.operationalinsights/workspaces'
+    | project id, name, customerId = tostring(properties.customerId), subscriptionId, resourceGroup
+  `;
+
+  const fallbackResponse = await fetch(url, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      query,
+      query: fallbackQuery,
       options: {
         $skip: 0,
-        $top: 100
+        $top: 500
       }
     })
   });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error?.message || "Failed to fetch workspaces from Azure.");
+  const fallbackData = await fallbackResponse.json();
+  if (!fallbackResponse.ok) {
+    throw new Error(fallbackData.error?.message || "Failed to fetch workspaces from Azure.");
   }
 
-  return (data.data || []).map((row: any) => ({
+  return (fallbackData.data || []).map((row: any) => ({
     id: row.id || row[0],
     name: row.name || row[1],
-    customerId: row.customerId || row[2]
+    customerId: row.customerId || row[2],
+    subscriptionId: row.subscriptionId || row[3] || undefined,
+    subscriptionName: row.subscriptionId || row[3] || undefined,
+    resourceGroup: row.resourceGroup || row[4] || undefined
   }));
 }
 

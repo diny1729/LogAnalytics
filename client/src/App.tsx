@@ -651,16 +651,49 @@ function getPredefinedWorkspaces(): AzureWorkspace[] {
   
   if (envWorkspaces.trim()) {
     envWorkspaces.split(",").forEach((entry: string) => {
-      const parts = entry.split(":");
-      if (parts.length >= 2) {
-        const name = parts[0].trim();
-        const customerId = parts.slice(1).join(":").trim();
-        if (name && customerId) {
-          list.push({ id: customerId, name, customerId });
+      const trimmed = entry.trim();
+      if (!trimmed) return;
+
+      let subName: string | undefined;
+      let wsName = "";
+      let customerId = "";
+
+      // Check format: SubscriptionName/WorkspaceName:CustomerId
+      if (trimmed.includes("/") && trimmed.includes(":")) {
+        const slashIdx = trimmed.indexOf("/");
+        subName = trimmed.substring(0, slashIdx).trim();
+        const remainder = trimmed.substring(slashIdx + 1).trim();
+        const colonIdx = remainder.lastIndexOf(":");
+        if (colonIdx !== -1) {
+          wsName = remainder.substring(0, colonIdx).trim();
+          customerId = remainder.substring(colonIdx + 1).trim();
         }
-      } else if (entry.trim()) {
-        const val = entry.trim();
-        list.push({ id: val, name: `Predefined (${val.substring(0, 8)}...)`, customerId: val });
+      } else {
+        const parts = trimmed.split(":");
+        if (parts.length >= 3) {
+          // Format: SubscriptionName:WorkspaceName:CustomerId
+          subName = parts[0].trim();
+          wsName = parts[1].trim();
+          customerId = parts.slice(2).join(":").trim();
+        } else if (parts.length === 2) {
+          // Format: WorkspaceName:CustomerId
+          wsName = parts[0].trim();
+          customerId = parts[1].trim();
+        } else {
+          // Format: CustomerId
+          customerId = trimmed;
+          wsName = `Predefined (${customerId.substring(0, 8)}...)`;
+        }
+      }
+
+      if (customerId) {
+        list.push({
+          id: customerId,
+          name: wsName || customerId,
+          customerId,
+          subscriptionName: subName || "Default Subscription",
+          subscriptionId: subName || undefined
+        });
       }
     });
   }
@@ -670,7 +703,8 @@ function getPredefinedWorkspaces(): AzureWorkspace[] {
     list.unshift({
       id: defaultWs.trim(),
       name: "Default Workspace (.env)",
-      customerId: defaultWs.trim()
+      customerId: defaultWs.trim(),
+      subscriptionName: "Default Subscription"
     });
   }
 
@@ -687,6 +721,12 @@ function combineWorkspaces(fetched: AzureWorkspace[]): AzureWorkspace[] {
   predefined.forEach(w => {
     if (w.customerId && !map.has(w.customerId)) {
       map.set(w.customerId, w);
+    } else if (w.customerId && map.has(w.customerId)) {
+      const existing = map.get(w.customerId)!;
+      if (!existing.subscriptionName && w.subscriptionName) {
+        existing.subscriptionName = w.subscriptionName;
+        existing.subscriptionId = w.subscriptionId;
+      }
     }
   });
 
@@ -700,6 +740,7 @@ interface TabState {
   timespan: string;
   maxRows: number;
   workspaceId: string;
+  selectedSubscription?: string;
   result: QueryResponse | null;
   loading: boolean;
   error: string | null;
@@ -716,7 +757,7 @@ interface TabState {
   isCustomInputMode: boolean;
 }
 
-function createInitialTab(id: string, title?: string, initialWsId: string = ""): TabState {
+function createInitialTab(id: string, title?: string, initialWsId: string = "", initialSub: string = "ALL"): TabState {
   return {
     id,
     title: title || "Query 1",
@@ -724,6 +765,7 @@ function createInitialTab(id: string, title?: string, initialWsId: string = ""):
     timespan: "PT24H",
     maxRows: 1000,
     workspaceId: initialWsId,
+    selectedSubscription: initialSub,
     result: null,
     loading: false,
     error: null,
@@ -1501,14 +1543,217 @@ function KqlCodeEditor({
   );
 }
 
+function GraphicalSubscriptionSelect({
+  subscriptions,
+  selectedSubscription,
+  totalWorkspacesCount,
+  onSelect
+}: {
+  subscriptions: Array<{ id?: string; name: string; count: number }>;
+  selectedSubscription: string;
+  totalWorkspacesCount: number;
+  onSelect: (sub: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const currentSub = subscriptions.find((s) => s.name === selectedSubscription || s.id === selectedSubscription);
+  const displayText = selectedSubscription === "ALL" || !currentSub
+    ? `All Subscriptions (${subscriptions.length})`
+    : currentSub.name;
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return subscriptions;
+    const q = search.toLowerCase();
+    return subscriptions.filter(
+      (s) => s.name.toLowerCase().includes(q) || (s.id && s.id.toLowerCase().includes(q))
+    );
+  }, [subscriptions, search]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", minWidth: "160px", flex: "1 1 180px" }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        title="Filter workspaces by Azure Subscription"
+        style={{
+          width: "100%",
+          padding: "8px 12px",
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(4, 20, 28, 0.98))",
+          border: `1px solid ${isOpen ? "#38bdf8" : "rgba(56, 189, 248, 0.35)"}`,
+          borderRadius: "8px",
+          color: selectedSubscription !== "ALL" ? "#38bdf8" : "#94a3b8",
+          fontSize: "13px",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          boxShadow: isOpen ? "0 0 15px rgba(56, 189, 248, 0.25)" : "none",
+          transition: "all 0.2s ease"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+          <span style={{ fontSize: "14px" }}>💳</span>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
+            {displayText}
+          </span>
+        </div>
+        <ChevronDown
+          size={14}
+          color="#38bdf8"
+          style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            right: 0,
+            minWidth: "260px",
+            zIndex: 9999,
+            background: "rgba(4, 18, 27, 0.96)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            border: "1px solid rgba(56, 189, 248, 0.4)",
+            borderRadius: "10px",
+            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.15)",
+            padding: "8px",
+            maxHeight: "320px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px"
+          }}
+        >
+          {subscriptions.length > 4 && (
+            <div style={{ padding: "2px 4px" }}>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Search subscriptions..."
+                style={{
+                  width: "100%",
+                  padding: "6px 10px",
+                  fontSize: "12px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                  borderRadius: "6px",
+                  color: "#f8fafc",
+                  outline: "none"
+                }}
+              />
+            </div>
+          )}
+
+          <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {/* All Subscriptions Option */}
+            <div
+              onClick={() => {
+                onSelect("ALL");
+                setIsOpen(false);
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: "6px",
+                background: selectedSubscription === "ALL"
+                  ? "linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(16, 185, 129, 0.15))"
+                  : "rgba(15, 23, 42, 0.4)",
+                border: `1px solid ${selectedSubscription === "ALL" ? "rgba(56, 189, 248, 0.6)" : "transparent"}`,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "13px" }}>🌐</span>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: selectedSubscription === "ALL" ? "#38bdf8" : "#f8fafc" }}>
+                    All Subscriptions
+                  </span>
+                  <span style={{ fontSize: "10px", color: "#64748b" }}>
+                    Show workspaces across all subscriptions
+                  </span>
+                </div>
+              </div>
+              <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: 700, background: "rgba(56,189,248,0.2)", padding: "2px 6px", borderRadius: "4px" }}>
+                {totalWorkspacesCount} ws
+              </span>
+            </div>
+
+            {/* Individual Subscriptions */}
+            {filtered.map((sub) => {
+              const isSelected = selectedSubscription === sub.name || (sub.id && selectedSubscription === sub.id);
+              return (
+                <div
+                  key={sub.name}
+                  onClick={() => {
+                    onSelect(sub.name);
+                    setIsOpen(false);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "6px",
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(16, 185, 129, 0.15))"
+                      : "rgba(15, 23, 42, 0.4)",
+                    border: `1px solid ${isSelected ? "rgba(56, 189, 248, 0.6)" : "transparent"}`,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#38bdf8" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      📁 {sub.name}
+                    </span>
+                    {sub.id && sub.id !== sub.name && (
+                      <span style={{ fontSize: "10px", color: "#64748b", fontFamily: "monospace" }}>
+                        Sub ID: {sub.id.substring(0, 13)}...
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "11px", color: isSelected ? "#34d399" : "#94a3b8", fontWeight: 600, background: "rgba(15,23,42,0.6)", padding: "2px 6px", borderRadius: "4px", flexShrink: 0 }}>
+                    {sub.count} {sub.count === 1 ? "ws" : "ws"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GraphicalWorkspaceSelect({
   workspaces,
   workspaceId,
+  selectedSubscription = "ALL",
   onSelect,
   onManualClick
 }: {
   workspaces: AzureWorkspace[];
   workspaceId: string;
+  selectedSubscription?: string;
   onSelect: (id: string) => void;
   onManualClick: () => void;
 }) {
@@ -1528,13 +1773,24 @@ function GraphicalWorkspaceSelect({
 
   const selectedWs = workspaces.find((w) => w.customerId === workspaceId);
 
-  const filteredWorkspaces = useMemo(() => {
-    if (!search.trim()) return workspaces;
-    const term = search.toLowerCase();
+  // Filter workspaces by selectedSubscription
+  const subscriptionWorkspaces = useMemo(() => {
+    if (!selectedSubscription || selectedSubscription === "ALL") return workspaces;
     return workspaces.filter(
-      (w) => w.name.toLowerCase().includes(term) || w.customerId.toLowerCase().includes(term)
+      (w) => w.subscriptionName === selectedSubscription || w.subscriptionId === selectedSubscription
     );
-  }, [workspaces, search]);
+  }, [workspaces, selectedSubscription]);
+
+  const filteredWorkspaces = useMemo(() => {
+    if (!search.trim()) return subscriptionWorkspaces;
+    const term = search.toLowerCase();
+    return subscriptionWorkspaces.filter(
+      (w) =>
+        w.name.toLowerCase().includes(term) ||
+        w.customerId.toLowerCase().includes(term) ||
+        (w.subscriptionName && w.subscriptionName.toLowerCase().includes(term))
+    );
+  }, [subscriptionWorkspaces, search]);
 
   return (
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
@@ -1561,7 +1817,7 @@ function GraphicalWorkspaceSelect({
         <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
           <span style={{ fontSize: "14px" }}>🏢</span>
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 700 }}>
-            {selectedWs ? `${selectedWs.name} (${selectedWs.customerId.slice(0, 8)}...)` : `-- Select a Workspace (${workspaces.length}) --`}
+            {selectedWs ? `${selectedWs.name} (${selectedWs.customerId.slice(0, 8)}...)` : `-- Select a Workspace (${subscriptionWorkspaces.length}) --`}
           </span>
         </div>
         <ChevronDown size={14} color="#38bdf8" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
@@ -1588,7 +1844,7 @@ function GraphicalWorkspaceSelect({
             gap: "6px"
           }}
         >
-          {workspaces.length > 5 && (
+          {subscriptionWorkspaces.length > 5 && (
             <div style={{ padding: "2px 4px" }}>
               <input
                 type="text"
@@ -1634,9 +1890,16 @@ function GraphicalWorkspaceSelect({
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#34d399" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      🏢 {ws.name}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#34d399" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        🏢 {ws.name}
+                      </span>
+                      {ws.subscriptionName && (
+                        <span style={{ fontSize: "10px", color: "#38bdf8", background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.25)", padding: "1px 5px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+                          {ws.subscriptionName}
+                        </span>
+                      )}
+                    </div>
                     <span style={{ fontSize: "10px", color: "#64748b", fontFamily: "monospace" }}>
                       {ws.customerId}
                     </span>
@@ -1649,6 +1912,12 @@ function GraphicalWorkspaceSelect({
                 </div>
               );
             })}
+
+            {filteredWorkspaces.length === 0 && (
+              <div style={{ padding: "12px", textAlign: "center", color: "#94a3b8", fontSize: "12px" }}>
+                No workspaces found matching filter.
+              </div>
+            )}
 
             <div
               onClick={() => {
@@ -1863,6 +2132,223 @@ function GraphicalPresetSelect({
   );
 }
 
+function isNumericFieldOrOp(field: string, op: string, val: string): boolean {
+  if (["<", "<=", ">", ">="].includes(op)) return true;
+  const isNumericName = /(_d|_i|_long|_real|_b|_count|_port|Port|Latency|Status|Size|Length|Duration|TimeTaken)$/i.test(field) || /^timeTaken/i.test(field);
+  if (isNumericName) return true;
+  const trimmed = val.trim();
+  if (trimmed !== "" && !isNaN(Number(trimmed)) && !trimmed.startsWith("0x")) return true;
+  return false;
+}
+
+function buildOptionClause(opt: PresetOption, customOp?: string, customVal?: string): string {
+  let defaultValMatch = opt.clause.match(/"([^"]*)"/)?.[1];
+  if (opt.clause.includes("between")) {
+    const betweenMatch = opt.clause.match(/between\s*\(([^)]+)\)/i);
+    if (betweenMatch) {
+      defaultValMatch = betweenMatch[1];
+    }
+  } else {
+    const unquotedNumMatch = opt.clause.match(/(==|!=|>=|>|<=|<)\s*([0-9.]+)/);
+    if (unquotedNumMatch) {
+      defaultValMatch = unquotedNumMatch[2];
+    }
+  }
+
+  const defaultOp = opt.clause.includes("!contains")
+    ? "!contains"
+    : opt.clause.includes("contains")
+    ? "contains"
+    : opt.clause.includes("between")
+    ? "between"
+    : opt.clause.includes(">=")
+    ? ">="
+    : opt.clause.includes(">")
+    ? ">"
+    : opt.clause.includes("<=")
+    ? "<="
+    : opt.clause.includes("<")
+    ? "<"
+    : opt.clause.includes("!=")
+    ? "!="
+    : "==";
+
+  const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
+  const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
+
+  const op = customOp || defaultOp;
+  const rawVal = customVal !== undefined ? customVal : (defaultValMatch ?? "");
+
+  if (op === "between") {
+    const cleanedVal = rawVal.replace(/^\(|\)$/g, "").trim();
+    return `| where ${field} between (${cleanedVal || "400 .. 599"})`;
+  }
+  if (op === "!contains") {
+    return `| where ${field} !contains "${rawVal}"`;
+  }
+  if (op === "contains") {
+    return `| where ${field} contains "${rawVal}"`;
+  }
+
+  const isNumeric = isNumericFieldOrOp(field, op, rawVal);
+  if (isNumeric) {
+    const numericVal = rawVal.trim() !== "" ? rawVal.trim() : "0";
+    return `| where ${field} ${op} ${numericVal}`;
+  }
+
+  return `| where ${field} ${op} "${rawVal}"`;
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function updateQueryConditionOption(
+  query: string,
+  opt: PresetOption,
+  enabled: boolean,
+  currentOp?: string,
+  currentVal?: string,
+  previousOp?: string,
+  previousVal?: string
+): string {
+  const currentClause = buildOptionClause(opt, currentOp, currentVal);
+  const previousClause =
+    previousOp !== undefined || previousVal !== undefined
+      ? buildOptionClause(opt, previousOp, previousVal)
+      : currentClause;
+
+  const lines = query.split("\n");
+  const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
+  const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
+
+  const isMatch = (line: string) => {
+    const trimmed = line.trim();
+    if (trimmed === currentClause.trim() || trimmed === previousClause.trim() || trimmed === opt.clause.trim()) {
+      return true;
+    }
+    if (field && new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}(\\s|$|\\(|==|!=|>=|>|<=|<|contains|between)`, "i").test(trimmed)) {
+      return true;
+    }
+    return false;
+  };
+
+  if (!enabled) {
+    const filtered = lines.filter((l) => !isMatch(l));
+    return filtered.join("\n");
+  }
+
+  const matchIdx = lines.findIndex((l) => isMatch(l));
+  if (matchIdx !== -1) {
+    lines[matchIdx] = currentClause;
+    return lines.join("\n");
+  }
+
+  const insertIdx = lines.findIndex((l) =>
+    /^\s*\|\s*(project|summarize|order\s+by|sort\s+by|take|limit|render|top)\b/i.test(l)
+  );
+
+  if (insertIdx !== -1) {
+    lines.splice(insertIdx, 0, currentClause);
+  } else {
+    lines.push(currentClause);
+  }
+
+  return lines.join("\n");
+}
+
+function selectAllPresetOptionsInQuery(
+  query: string,
+  preset: PresetQuery,
+  ops: Record<string, string>,
+  vals: Record<string, string>
+): string {
+  let updatedQuery = query;
+  for (const opt of preset.options) {
+    updatedQuery = updateQueryConditionOption(updatedQuery, opt, true, ops[opt.label], vals[opt.label]);
+  }
+  return updatedQuery;
+}
+
+function clearAllPresetOptionsInQuery(
+  query: string,
+  preset: PresetQuery,
+  ops: Record<string, string>,
+  vals: Record<string, string>
+): string {
+  let updatedQuery = query;
+  for (const opt of preset.options) {
+    updatedQuery = updateQueryConditionOption(updatedQuery, opt, false, ops[opt.label], vals[opt.label]);
+  }
+  return updatedQuery;
+}
+
+function updateQueryDynamicFilter(
+  query: string,
+  field: string,
+  filterObj: { field: string; clauseTemplate: (val: string | string[]) => string } | undefined,
+  prevSelected: string[] | undefined,
+  nextSelected: string[] | undefined
+): string {
+  const prevClause = prevSelected && prevSelected.length > 0 && filterObj ? filterObj.clauseTemplate(prevSelected).trim() : "";
+  const nextClause = nextSelected && nextSelected.length > 0 && filterObj ? filterObj.clauseTemplate(nextSelected).trim() : "";
+
+  const lines = query.split("\n");
+  const isMatch = (line: string) => {
+    const trimmed = line.trim();
+    if (prevClause && trimmed === prevClause) return true;
+    if (new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}\\s+in\\s*\\(`, "i").test(trimmed)) return true;
+    if (new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}\\s*==\\s*`, "i").test(trimmed)) return true;
+    return false;
+  };
+
+  if (!nextClause) {
+    return lines.filter((l) => !isMatch(l)).join("\n");
+  }
+
+  const matchIdx = lines.findIndex((l) => isMatch(l));
+  if (matchIdx !== -1) {
+    lines[matchIdx] = nextClause;
+    return lines.join("\n");
+  }
+
+  const terminalIdx = lines.findIndex((l) =>
+    /^\s*\|\s*(project|summarize|order\s+by|sort\s+by|take|limit|render|top)\b/i.test(l)
+  );
+  if (terminalIdx !== -1) {
+    lines.splice(terminalIdx, 0, nextClause);
+  } else {
+    lines.push(nextClause);
+  }
+  return lines.join("\n");
+}
+
+function updateQueryProjectColumns(
+  query: string,
+  preset: PresetQuery,
+  selectedCols: Set<string>
+): string {
+  const activeProject = preset.projectColumns.filter((c) => selectedCols.has(c));
+  const newProjectLine = activeProject.length > 0 ? `| project ${activeProject.join(", ")}` : "";
+
+  const lines = query.split("\n");
+  const projectIdx = lines.findIndex((l) => /^\s*\|\s*project\b/i.test(l));
+
+  if (projectIdx !== -1) {
+    if (newProjectLine) {
+      lines[projectIdx] = newProjectLine;
+    } else {
+      lines.splice(projectIdx, 1);
+    }
+    return lines.join("\n");
+  }
+
+  if (newProjectLine) {
+    lines.push(newProjectLine);
+  }
+  return lines.join("\n");
+}
+
 export function App() {
   const sortedPresets = useMemo(() => {
     return [...PRESETS].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -1895,7 +2381,8 @@ export function App() {
     const newId = `tab-${Date.now()}`;
     const newNum = tabs.length + 1;
     const initialWs = activeTab ? activeTab.workspaceId : "";
-    const newTab = createInitialTab(newId, `Query ${newNum}`, initialWs);
+    const initialSub = activeTab ? (activeTab.selectedSubscription || "ALL") : "ALL";
+    const newTab = createInitialTab(newId, `Query ${newNum}`, initialWs, initialSub);
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
   }
@@ -1915,6 +2402,7 @@ export function App() {
     timespan,
     maxRows,
     workspaceId,
+    selectedSubscription = "ALL",
     result,
     loading,
     error,
@@ -1942,6 +2430,9 @@ export function App() {
   }
   function setWorkspaceId(wsId: string) {
     handleWorkspaceSelect(wsId);
+  }
+  function setSelectedSubscription(sub: string) {
+    updateActiveTab({ selectedSubscription: sub });
   }
   function setResult(res: QueryResponse | null) {
     updateActiveTab({ result: res });
@@ -2057,14 +2548,23 @@ export function App() {
   function togglePresetOption(opt: PresetOption) {
     setPresetOptions((current) => {
       const next = new Set(current);
-      if (next.has(opt.label) || next.has(opt.clause)) {
+      const isRemoving = next.has(opt.label) || next.has(opt.clause);
+      if (isRemoving) {
         next.delete(opt.label);
         next.delete(opt.clause);
       } else {
         next.add(opt.label);
         next.add(opt.clause);
       }
-      setQuery(generateQuery(activePreset!, next, presetProjectColumns, selectedDynamicFilters, optionOperators, optionValues));
+      setQuery((currentQuery) =>
+        updateQueryConditionOption(
+          currentQuery,
+          opt,
+          !isRemoving,
+          optionOperators[opt.label],
+          optionValues[opt.label]
+        )
+      );
       return next;
     });
   }
@@ -2073,34 +2573,52 @@ export function App() {
     if (!activePreset) return;
     const allClauses = new Set(activePreset.options.map(o => o.clause));
     setPresetOptions(allClauses);
-    setQuery(generateQuery(activePreset, allClauses, presetProjectColumns, selectedDynamicFilters));
+    setQuery((currentQuery) => selectAllPresetOptionsInQuery(currentQuery, activePreset, optionOperators, optionValues));
   }
 
   function clearAllPresetOptions() {
     if (!activePreset) return;
     const empty = new Set<string>();
     setPresetOptions(empty);
-    setQuery(generateQuery(activePreset, empty, presetProjectColumns, selectedDynamicFilters));
+    setQuery((currentQuery) => clearAllPresetOptionsInQuery(currentQuery, activePreset, optionOperators, optionValues));
   }
 
   function selectAllProjectColumns() {
     if (!activePreset) return;
     const allCols = new Set(activePreset.projectColumns);
     setPresetProjectColumns(allCols);
-    setQuery(generateQuery(activePreset, presetOptions, allCols, selectedDynamicFilters));
+    setQuery((currentQuery) => updateQueryProjectColumns(currentQuery, activePreset, allCols));
   }
 
   function clearAllProjectColumns() {
     if (!activePreset) return;
     const empty = new Set<string>();
     setPresetProjectColumns(empty);
-    setQuery(generateQuery(activePreset, presetOptions, empty, selectedDynamicFilters));
+    setQuery((currentQuery) => updateQueryProjectColumns(currentQuery, activePreset, empty));
   }
 
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
   const [workspaces, setWorkspaces] = useState<AzureWorkspace[]>(() => getPredefinedWorkspaces());
   const [fetchingWorkspaces, setFetchingWorkspaces] = useState(false);
+
+  const uniqueSubscriptions = useMemo(() => {
+    const map = new Map<string, { id?: string; name: string; count: number }>();
+    workspaces.forEach((ws) => {
+      const subName = ws.subscriptionName || ws.subscriptionId || "Default Subscription";
+      const existing = map.get(subName);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(subName, {
+          id: ws.subscriptionId,
+          name: subName,
+          count: 1
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [workspaces]);
 
   async function loadWorkspaces() {
     if (!isAuthenticated || accounts.length === 0) return;
@@ -2330,91 +2848,48 @@ export function App() {
     }
   }
 
-  function isNumericFieldOrOp(field: string, op: string, val: string): boolean {
-    if (["<", "<=", ">", ">="].includes(op)) return true;
-    const isNumericName = /(_d|_i|_long|_real|_b|_count|_port|Port|Latency|Status|Size|Length|Duration|TimeTaken)$/i.test(field) || /^timeTaken/i.test(field);
-    if (isNumericName) return true;
-    const trimmed = val.trim();
-    if (trimmed !== "" && !isNaN(Number(trimmed)) && !trimmed.startsWith("0x")) return true;
-    return false;
-  }
-
-  function buildOptionClause(opt: PresetOption, customOp?: string, customVal?: string): string {
-    let defaultValMatch = opt.clause.match(/"([^"]*)"/)?.[1];
-    if (opt.clause.includes("between")) {
-      const betweenMatch = opt.clause.match(/between\s*\(([^)]+)\)/i);
-      if (betweenMatch) {
-        defaultValMatch = betweenMatch[1];
-      }
-    } else {
-      const unquotedNumMatch = opt.clause.match(/(==|!=|>=|>|<=|<)\s*([0-9.]+)/);
-      if (unquotedNumMatch) {
-        defaultValMatch = unquotedNumMatch[2];
-      }
-    }
-
-    const defaultOp = opt.clause.includes("!contains")
-      ? "!contains"
-      : opt.clause.includes("contains")
-      ? "contains"
-      : opt.clause.includes("between")
-      ? "between"
-      : opt.clause.includes(">=")
-      ? ">="
-      : opt.clause.includes(">")
-      ? ">"
-      : opt.clause.includes("<=")
-      ? "<="
-      : opt.clause.includes("<")
-      ? "<"
-      : opt.clause.includes("!=")
-      ? "!="
-      : "==";
-
-    const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
-    const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
-
-    const op = customOp || defaultOp;
-    const rawVal = customVal !== undefined ? customVal : (defaultValMatch ?? "");
-
-    if (op === "between") {
-      const cleanedVal = rawVal.replace(/^\(|\)$/g, "").trim();
-      return `| where ${field} between (${cleanedVal || "400 .. 599"})`;
-    }
-    if (op === "!contains") {
-      return `| where ${field} !contains "${rawVal}"`;
-    }
-    if (op === "contains") {
-      return `| where ${field} contains "${rawVal}"`;
-    }
-
-    const isNumeric = isNumericFieldOrOp(field, op, rawVal);
-    if (isNumeric) {
-      const numericVal = rawVal.trim() !== "" ? rawVal.trim() : "0";
-      return `| where ${field} ${op} ${numericVal}`;
-    }
-
-    return `| where ${field} ${op} "${rawVal}"`;
-  }
-
   function handleOptionOperatorChange(opt: PresetOption, newOp: string) {
+    const prevOp = optionOperators[opt.label];
+    const prevVal = optionValues[opt.label];
     const updatedOps = { ...optionOperators, [opt.label]: newOp };
     setOptionOperators(updatedOps);
     const updatedOptions = new Set(presetOptions);
     updatedOptions.add(opt.label);
     updatedOptions.add(opt.clause);
     setPresetOptions(updatedOptions);
-    setQuery(generateQuery(activePreset!, updatedOptions, presetProjectColumns, selectedDynamicFilters, updatedOps, optionValues));
+    setQuery((currentQuery) =>
+      updateQueryConditionOption(
+        currentQuery,
+        opt,
+        true,
+        newOp,
+        prevVal,
+        prevOp,
+        prevVal
+      )
+    );
   }
 
   function handleOptionValueChange(opt: PresetOption, newVal: string) {
+    const prevOp = optionOperators[opt.label];
+    const prevVal = optionValues[opt.label];
     const updatedVals = { ...optionValues, [opt.label]: newVal };
     setOptionValues(updatedVals);
     const updatedOptions = new Set(presetOptions);
     updatedOptions.add(opt.label);
     updatedOptions.add(opt.clause);
     setPresetOptions(updatedOptions);
-    setQuery(generateQuery(activePreset!, updatedOptions, presetProjectColumns, selectedDynamicFilters, optionOperators, updatedVals));
+    setQuery((currentQuery) =>
+      updateQueryConditionOption(
+        currentQuery,
+        opt,
+        true,
+        prevOp,
+        newVal,
+        prevOp,
+        prevVal
+      )
+    );
   }
 
   function generateQuery(
@@ -2561,9 +3036,13 @@ export function App() {
   function handleWorkspaceSelect(newWsId: string) {
     if (newWsId === workspaceId) return;
 
+    const matchingWs = workspaces.find((w) => w.customerId === newWsId);
+    const wsSub = matchingWs?.subscriptionName || matchingWs?.subscriptionId;
+
     // Clear all tab data (results, active presets, filter conditions, project columns, dynamic filters, errors) for the active tab when selecting a different workspace
     updateActiveTab({
       workspaceId: newWsId,
+      selectedSubscription: wsSub || selectedSubscription,
       result: null,
       error: null,
       loading: false,
@@ -2591,30 +3070,39 @@ export function App() {
     const nextFilters = { ...selectedDynamicFilters, [field]: updated };
     setSelectedDynamicFilters(nextFilters);
     if (activePreset) {
-      setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
+      const filterObj = activePreset.dynamicFilters?.find((f) => f.field === field);
+      setQuery((currentQuery) =>
+        updateQueryDynamicFilter(currentQuery, field, filterObj, current, updated)
+      );
       fetchDynamicFilters(activePreset, workspaceId, nextFilters);
     }
   }
 
   function selectAllDynamicFilterValues(field: string, values: string[]) {
+    const current = selectedDynamicFilters[field] || [];
     const nextFilters = { ...selectedDynamicFilters, [field]: [...values] };
     setSelectedDynamicFilters(nextFilters);
     if (activePreset) {
-      setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
+      const filterObj = activePreset.dynamicFilters?.find((f) => f.field === field);
+      setQuery((currentQuery) =>
+        updateQueryDynamicFilter(currentQuery, field, filterObj, current, [...values])
+      );
       fetchDynamicFilters(activePreset, workspaceId, nextFilters);
     }
   }
 
   function clearDynamicFilterValues(field: string) {
+    const current = selectedDynamicFilters[field] || [];
     const nextFilters = { ...selectedDynamicFilters, [field]: [] };
     setSelectedDynamicFilters(nextFilters);
     if (activePreset) {
-      setQuery(generateQuery(activePreset, presetOptions, presetProjectColumns, nextFilters));
+      const filterObj = activePreset.dynamicFilters?.find((f) => f.field === field);
+      setQuery((currentQuery) =>
+        updateQueryDynamicFilter(currentQuery, field, filterObj, current, [])
+      );
       fetchDynamicFilters(activePreset, workspaceId, nextFilters);
     }
   }
-
-
 
   function toggleProjectColumn(column: string) {
     const next = new Set(presetProjectColumns);
@@ -2623,7 +3111,7 @@ export function App() {
     setPresetProjectColumns(next);
 
     if (activePreset) {
-      setQuery(generateQuery(activePreset, presetOptions, next, selectedDynamicFilters));
+      setQuery((currentQuery) => updateQueryProjectColumns(currentQuery, activePreset, next));
     }
   }
 
@@ -2864,12 +3352,12 @@ export function App() {
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start", marginBottom: "16px" }}>
-            <div className="dynamic-filter-card" style={{ flex: "1 1 320px", maxWidth: "440px" }}>
+            <div className="dynamic-filter-card" style={{ flex: "1 1 540px", maxWidth: "620px" }}>
               <div className="dynamic-filter-header">
-                <span className="dynamic-filter-label" style={{ color: "#38bdf8" }}>🏢 Log Analytics Workspace</span>
+                <span className="dynamic-filter-label" style={{ color: "#38bdf8" }}>🏢 Azure Subscription & Workspace</span>
                 <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                   <span className="filter-count">
-                    {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
+                    {uniqueSubscriptions.length} {uniqueSubscriptions.length === 1 ? "subscription" : "subscriptions"} · {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
                   </span>
                   <button
                     type="button"
@@ -2895,28 +3383,47 @@ export function App() {
                 </div>
               </div>
 
-              <div className="dynamic-filter-inputs">
+              <div className="dynamic-filter-inputs" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 {isCustomInputMode ? (
                   <input
                     className="filter-search-field"
-                    style={{ paddingLeft: "10px !important", height: "32px !important" }}
+                    style={{ paddingLeft: "10px !important", height: "32px !important", width: "100%" }}
                     value={workspaceId}
                     onChange={(event) => handleWorkspaceSelect(event.target.value)}
                     placeholder="Enter or paste Workspace ID GUID..."
                   />
                 ) : (
-                  <GraphicalWorkspaceSelect
-                    workspaces={workspaces}
-                    workspaceId={workspaceId}
-                    onSelect={(id) => handleWorkspaceSelect(id)}
-                    onManualClick={() => setIsCustomInputMode(true)}
-                  />
+                  <>
+                    <GraphicalSubscriptionSelect
+                      subscriptions={uniqueSubscriptions}
+                      selectedSubscription={selectedSubscription}
+                      totalWorkspacesCount={workspaces.length}
+                      onSelect={(sub) => {
+                        setSelectedSubscription(sub);
+                        if (sub !== "ALL") {
+                          const matches = workspaces.filter(w => w.subscriptionName === sub || w.subscriptionId === sub);
+                          if (matches.length > 0 && !matches.some(w => w.customerId === workspaceId)) {
+                            handleWorkspaceSelect(matches[0].customerId);
+                          }
+                        }
+                      }}
+                    />
+                    <div style={{ flex: "2 1 240px", minWidth: "220px" }}>
+                      <GraphicalWorkspaceSelect
+                        workspaces={workspaces}
+                        workspaceId={workspaceId}
+                        selectedSubscription={selectedSubscription}
+                        onSelect={(id) => handleWorkspaceSelect(id)}
+                        onManualClick={() => setIsCustomInputMode(true)}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
 
               {workspaces.length === 0 && !fetchingWorkspaces && (
                 <p style={{ color: "#94a3b8", fontSize: "11px", margin: "6px 0 0 0" }}>
-                  Configure <code>VITE_WORKSPACES=Name:GUID</code> in <code>.env</code> or click "Manual" to enter a workspace ID directly.
+                  Configure <code>VITE_WORKSPACES=Subscription/Workspace:GUID</code> in <code>.env</code> or click "Manual" to enter a workspace ID directly.
                 </p>
               )}
             </div>
@@ -3638,7 +4145,7 @@ function ResultTable({
   const [search, setSearch] = useState("");
   const [sortColumnName, setSortColumnName] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
-  const [useLocalTime, setUseLocalTime] = useState(false);
+  const [useLocalTime, setUseLocalTime] = useState(true);
   const [page, setPage] = useState(0);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [resizingCol, setResizingCol] = useState<{ name: string; startX: number; startWidth: number } | null>(null);
@@ -5036,7 +5543,7 @@ function ResultTable({
   );
 }
 
-function formatCell(value: unknown, useLocalTime: boolean = false): string {
+function formatCell(value: unknown, useLocalTime: boolean = true): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
   const str = String(value).trim();
