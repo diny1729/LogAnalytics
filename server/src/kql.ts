@@ -139,7 +139,8 @@ function isBoundary(value: string | undefined): boolean {
 export function ensureQueryRowLimit(query: string, maxRows: number): string {
   if (!maxRows || maxRows <= 0) return query;
 
-  const lines = query.split("\n");
+  let formattedQuery = query;
+  const lines = formattedQuery.split("\n");
 
   // Check if there is an existing take or limit clause (e.g., | take 5000 or | limit 1000)
   let takeIndex = -1;
@@ -155,41 +156,49 @@ export function ensureQueryRowLimit(query: string, maxRows: number): string {
       /\|\s*(take|limit)\s+\d+/i,
       `| take ${maxRows}`
     );
-    return lines.join("\n");
-  }
+    formattedQuery = lines.join("\n");
+  } else {
+    // Check if there is a render clause (e.g. | render barchart)
+    // In KQL, render must be the final operator in the pipeline
+    const renderIndex = lines.findIndex((l) =>
+      /^\s*\|\s*render\b/i.test(l.trim())
+    );
 
-  // Check if there is a render clause (e.g. | render barchart)
-  // In KQL, render must be the final operator in the pipeline
-  const renderIndex = lines.findIndex((l) =>
-    /^\s*\|\s*render\b/i.test(l.trim())
-  );
-
-  if (renderIndex !== -1) {
-    lines.splice(renderIndex, 0, `| take ${maxRows}`);
-    return lines.join("\n");
-  }
-
-  // Find the last non-empty, non-comment line
-  let lastActiveIdx = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const trimmed = lines[i].trim();
-    if (trimmed && !trimmed.startsWith("//")) {
-      lastActiveIdx = i;
-      break;
-    }
-  }
-
-  if (lastActiveIdx !== -1) {
-    const lastLine = lines[lastActiveIdx];
-    if (lastLine.trim().endsWith(";")) {
-      lines[lastActiveIdx] = lastLine.replace(/;\s*$/, "");
-      lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows};`);
+    if (renderIndex !== -1) {
+      lines.splice(renderIndex, 0, `| take ${maxRows}`);
+      formattedQuery = lines.join("\n");
     } else {
-      lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows}`);
+      // Find the last non-empty, non-comment line
+      let lastActiveIdx = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const trimmed = lines[i].trim();
+        if (trimmed && !trimmed.startsWith("//")) {
+          lastActiveIdx = i;
+          break;
+        }
+      }
+
+      if (lastActiveIdx !== -1) {
+        const lastLine = lines[lastActiveIdx];
+        if (lastLine.trim().endsWith(";")) {
+          lines[lastActiveIdx] = lastLine.replace(/;\s*$/, "");
+          lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows};`);
+        } else {
+          lines.splice(lastActiveIdx + 1, 0, `| take ${maxRows}`);
+        }
+        formattedQuery = lines.join("\n");
+      } else {
+        formattedQuery = `${query}\n| take ${maxRows}`;
+      }
     }
-    return lines.join("\n");
   }
 
-  return `${query}\n| take ${maxRows}`;
+  // Prepend KQL truncation settings if maxRows > 5000 so Azure Log Analytics API returns the full result set
+  if (maxRows > 5000 && !/^\s*set\s+truncationmaxrecords\b/im.test(formattedQuery)) {
+    const truncationCap = Math.max(maxRows, 50000);
+    formattedQuery = `set truncationmaxrecords = ${truncationCap};\nset notruncation;\n${formattedQuery}`;
+  }
+
+  return formattedQuery;
 }
 

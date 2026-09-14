@@ -86,25 +86,25 @@ describe("KQL filter parsing", () => {
     
     // 10000 rows
     const query10k = ensureQueryRowLimit(query, 10000);
-    expect(query10k).toBe("AzureDiagnostics\n| where Category == 'FrontDoorAccessLog'\n| order by TimeGenerated desc\n| take 10000");
+    expect(query10k).toBe("set truncationmaxrecords = 50000;\nset notruncation;\nAzureDiagnostics\n| where Category == 'FrontDoorAccessLog'\n| order by TimeGenerated desc\n| take 10000");
 
     // 50000 rows
     const query50k = ensureQueryRowLimit(query, 50000);
-    expect(query50k).toBe("AzureDiagnostics\n| where Category == 'FrontDoorAccessLog'\n| order by TimeGenerated desc\n| take 50000");
+    expect(query50k).toBe("set truncationmaxrecords = 50000;\nset notruncation;\nAzureDiagnostics\n| where Category == 'FrontDoorAccessLog'\n| order by TimeGenerated desc\n| take 50000");
   });
 
   it("updates existing take/limit clause to the requested max rows", async () => {
     const { ensureQueryRowLimit } = await import("./kql.js");
     const query = "AzureDiagnostics\n| order by TimeGenerated desc\n| take 5000";
     const updated = ensureQueryRowLimit(query, 10000);
-    expect(updated).toBe("AzureDiagnostics\n| order by TimeGenerated desc\n| take 10000");
+    expect(updated).toBe("set truncationmaxrecords = 50000;\nset notruncation;\nAzureDiagnostics\n| order by TimeGenerated desc\n| take 10000");
   });
 
   it("places take clause before render commands", async () => {
     const { ensureQueryRowLimit } = await import("./kql.js");
     const query = "AzureDiagnostics\n| summarize count() by bin(TimeGenerated, 1h)\n| render timechart";
     const updated = ensureQueryRowLimit(query, 10000);
-    expect(updated).toBe("AzureDiagnostics\n| summarize count() by bin(TimeGenerated, 1h)\n| take 10000\n| render timechart");
+    expect(updated).toBe("set truncationmaxrecords = 50000;\nset notruncation;\nAzureDiagnostics\n| summarize count() by bin(TimeGenerated, 1h)\n| take 10000\n| render timechart");
   });
 });
 
