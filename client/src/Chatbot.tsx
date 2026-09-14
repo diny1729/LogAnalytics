@@ -36,7 +36,7 @@ export function Chatbot({ onClose }: { onClose: () => void }) {
     <div className="chatbot-overlay">
       <div className="chatbot-header">
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <MessageSquare size={18} color="#ec4899" />
+          <MessageSquare size={18} color="#38bdf8" />
           <span>KQL Assistant</span>
         </div>
         <button className="close-btn" onClick={onClose}>
