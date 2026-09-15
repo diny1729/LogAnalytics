@@ -6,7 +6,8 @@ export const msalConfig: Configuration = {
     // Read runtime environment variables (injected by server in k8s/production or from Vite env in dev)
     clientId: getEnv("VITE_AZURE_CLIENT_ID"),
     authority: `https://login.microsoftonline.com/${getEnv("VITE_AZURE_TENANT_ID") || "common"}`,
-    redirectUri: "/",
+    redirectUri: getEnv("VITE_AZURE_REDIRECT_URI") || "/auth/callback",
+    postLogoutRedirectUri: getEnv("VITE_AZURE_LOGIN_URI") || "/auth/login",
   },
   cache: {
     cacheLocation: "sessionStorage", // This configures where your cache will be stored
@@ -30,7 +31,8 @@ export const msalConfig: Configuration = {
   },
 };
 
-// Add here scopes for id token to be used at MS Identity Platform endpoints.
+// Standard OpenID Connect scopes for user sign-in and profile info (does not require Azure RM admin consent)
 export const loginRequest = {
-  scopes: ["https://management.azure.com/user_impersonation"],
+  scopes: ["openid", "profile", "email"],
+  redirectUri: getEnv("VITE_AZURE_REDIRECT_URI") || "/auth/callback",
 };

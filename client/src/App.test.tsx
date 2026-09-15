@@ -38,6 +38,7 @@ describe("App", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("renders the login landing page when unauthenticated", () => {
@@ -47,6 +48,46 @@ describe("App", () => {
 
     expect(screen.getByText(/Azure Log Analytics KQL Explorer/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sign in with Microsoft Azure AD/i })).toBeInTheDocument();
+  });
+
+  it("renders access denied when user is authenticated but not in allowed AD groups", () => {
+    vi.stubEnv("VITE_REQUIRE_AZURE_AD_AUTH", "true");
+    vi.stubEnv("VITE_ALLOWED_AZURE_AD_GROUPS", "SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6");
+    vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
+    vi.mocked(msalReact.useMsal).mockReturnValue({
+      instance: {} as any,
+      accounts: [{
+        username: "user@contoso.com",
+        name: "Test User",
+        idTokenClaims: { groups: ["other-group-id"] }
+      }] as any,
+      inProgress: "none" as any,
+      logger: {} as any
+    } as any);
+
+    render(<App />);
+
+    expect(screen.getByText(/Access Denied: Azure AD Group Restriction/i)).toBeInTheDocument();
+  });
+
+  it("grants access when user has matching AD group", () => {
+    vi.stubEnv("VITE_REQUIRE_AZURE_AD_AUTH", "true");
+    vi.stubEnv("VITE_ALLOWED_AZURE_AD_GROUPS", "SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6");
+    vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
+    vi.mocked(msalReact.useMsal).mockReturnValue({
+      instance: {} as any,
+      accounts: [{
+        username: "user@contoso.com",
+        name: "Test User",
+        idTokenClaims: { groups: ["secops-admins"] }
+      }] as any,
+      inProgress: "none" as any,
+      logger: {} as any
+    } as any);
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: /Azure Log Analytics KQL/i })).toBeInTheDocument();
   });
 
   it("renders the query workspace when authenticated", () => {

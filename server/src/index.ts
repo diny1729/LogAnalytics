@@ -23,7 +23,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(__dirname, "../../client/dist");
 
 app.disable("x-powered-by");
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://login.microsoftonline.com",
+          "https://management.azure.com",
+          "https://api.loganalytics.io",
+          "https://*.openai.azure.com"
+        ]
+      }
+    }
+  })
+);
 app.use(
   cors({
     origin(origin, callback) {
@@ -54,6 +74,25 @@ app.use(
   })
 );
 
+function getRuntimeConfig() {
+  return {
+    VITE_REQUIRE_AZURE_AD_AUTH: process.env.VITE_REQUIRE_AZURE_AD_AUTH ?? config.VITE_REQUIRE_AZURE_AD_AUTH,
+    VITE_AZURE_CLIENT_ID: process.env.VITE_AZURE_CLIENT_ID ?? config.VITE_AZURE_CLIENT_ID,
+    VITE_AZURE_TENANT_ID: process.env.VITE_AZURE_TENANT_ID ?? config.VITE_AZURE_TENANT_ID,
+    VITE_AZURE_REDIRECT_URI: process.env.VITE_AZURE_REDIRECT_URI ?? config.VITE_AZURE_REDIRECT_URI,
+    VITE_AZURE_LOGIN_URI: process.env.VITE_AZURE_LOGIN_URI ?? config.VITE_AZURE_LOGIN_URI,
+    VITE_WORKSPACES: process.env.VITE_WORKSPACES ?? config.VITE_WORKSPACES,
+    VITE_LOG_ANALYTICS_WORKSPACE_ID: (process.env.LOG_ANALYTICS_WORKSPACE_ID ?? config.LOG_ANALYTICS_WORKSPACE_ID) || "",
+    VITE_ALLOWED_AZURE_AD_GROUPS: process.env.VITE_ALLOWED_AZURE_AD_GROUPS ?? config.VITE_ALLOWED_AZURE_AD_GROUPS
+  };
+}
+
+app.get("/runtime-config.js", (_request, response) => {
+  response.setHeader("Content-Type", "application/javascript; charset=UTF-8");
+  response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  response.send(`window.__RUNTIME_CONFIG__ = ${JSON.stringify(getRuntimeConfig())};`);
+});
+
 app.use("/api", router);
 
 if (config.NODE_ENV === "production" || fs.existsSync(path.join(clientDist, "index.html"))) {
@@ -65,15 +104,8 @@ if (config.NODE_ENV === "production" || fs.existsSync(path.join(clientDist, "ind
       return;
     }
     let html = fs.readFileSync(indexPath, "utf-8");
-    const runtimeConfig = {
-      VITE_REQUIRE_AZURE_AD_AUTH: process.env.VITE_REQUIRE_AZURE_AD_AUTH ?? config.VITE_REQUIRE_AZURE_AD_AUTH,
-      VITE_AZURE_CLIENT_ID: process.env.VITE_AZURE_CLIENT_ID ?? config.VITE_AZURE_CLIENT_ID,
-      VITE_AZURE_TENANT_ID: process.env.VITE_AZURE_TENANT_ID ?? config.VITE_AZURE_TENANT_ID,
-      VITE_WORKSPACES: process.env.VITE_WORKSPACES ?? config.VITE_WORKSPACES,
-      VITE_LOG_ANALYTICS_WORKSPACE_ID: (process.env.LOG_ANALYTICS_WORKSPACE_ID ?? config.LOG_ANALYTICS_WORKSPACE_ID) || "",
-      VITE_ALLOWED_AZURE_AD_GROUPS: process.env.VITE_ALLOWED_AZURE_AD_GROUPS ?? config.VITE_ALLOWED_AZURE_AD_GROUPS
-    };
-    const scriptTag = `<script>window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};</script>`;
+    const runtimeConfig = getRuntimeConfig();
+    const scriptTag = `<script src="/runtime-config.js"></script>\n<script>window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};</script>`;
     html = html.replace("</head>", `${scriptTag}\n</head>`);
     response.setHeader("Content-Type", "text/html");
     response.send(html);

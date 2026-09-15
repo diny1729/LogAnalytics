@@ -207,12 +207,14 @@ CORS_ORIGIN=https://loganalytics.yourcompany.com,http://localhost:5010,http://lo
 ### 2. Add Redirect URI in Azure AD Portal (Microsoft Entra ID)
 1. Go to **Azure Portal > Microsoft Entra ID > App Registrations > [Your App Registration]**.
 2. Click **Authentication** in the left sidebar.
-3. Under **Single-page application (SPA)**, add your custom domain redirect URI:
-   - `https://loganalytics.yourcompany.com/` (or `http://kql-app.local:5010/`)
+3. Under **Single-page application (SPA)**, add your custom domain redirect URIs:
+   - `https://loganalytics.yourcompany.com/auth/callback` (Redirect URI for login response)
+   - `https://loganalytics.yourcompany.com/auth/login` (Post logout / login landing URI)
+   - `http://localhost:8080/auth/callback` (Local testing)
 4. Click **Save**.
 
 ### 3. Client MSAL Redirect Configuration (`client/src/authConfig.ts`)
-The client app uses `redirectUri: "/"` by default, which automatically uses your current browser origin (`window.location.origin`). No code changes are required unless you wish to specify an explicit environment override.
+The client app uses `redirectUri: "/auth/callback"` and `postLogoutRedirectUri: "/auth/login"` by default, which automatically uses your current browser origin (`window.location.origin`). You can override these using `VITE_AZURE_REDIRECT_URI` and `VITE_AZURE_LOGIN_URI` in `.env`.
 
 ### 4. Local Vite Dev Server Host Binding (`client/vite.config.ts`)
 If mapping a custom local domain via your `hosts` file (e.g., `127.0.0.1 loganalytics.local`), enable host binding in `client/vite.config.ts`:

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Calendar,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -1263,8 +1264,8 @@ function KqlCodeEditor({
         alignItems: "center",
         justifyContent: "space-between",
         padding: "6px 12px",
-        background: syntaxErrors.length > 0 ? "rgba(35, 10, 18, 0.95)" : "rgba(4, 23, 32, 0.95)",
-        border: `1px solid ${syntaxErrors.length > 0 ? "rgba(244, 63, 94, 0.5)" : "rgba(45, 212, 191, 0.28)"}`,
+        background: syntaxErrors.length > 0 ? "rgba(35, 10, 18, 0.95)" : "rgba(8, 22, 38, 0.95)",
+        border: `1px solid ${syntaxErrors.length > 0 ? "rgba(244, 63, 94, 0.5)" : "var(--glass-border)"}`,
         borderBottom: editorSize === "minimized" ? undefined : "none",
         borderTopLeftRadius: "8px",
         borderTopRightRadius: "8px",
@@ -1287,9 +1288,9 @@ function KqlCodeEditor({
             type="button"
             onClick={() => setEditorSize(editorSize === "minimized" ? "normal" : "minimized")}
             style={{
-              background: editorSize === "minimized" ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
-              border: `1px solid ${editorSize === "minimized" ? "#10b981" : "rgba(56, 189, 248, 0.3)"}`,
-              color: editorSize === "minimized" ? "#34d399" : "#94a3b8",
+              background: editorSize === "minimized" ? "rgba(24, 86, 255, 0.2)" : "rgba(15, 23, 42, 0.6)",
+              border: `1px solid ${editorSize === "minimized" ? "#1856FF" : "rgba(56, 189, 248, 0.3)"}`,
+              color: editorSize === "minimized" ? "#38bdf8" : "#94a3b8",
               borderRadius: "6px",
               padding: "4px 8px",
               fontSize: "11px",
@@ -1360,8 +1361,8 @@ function KqlCodeEditor({
           onClick={() => setEditorSize("normal")}
           style={{
             padding: "10px 14px",
-            background: "rgba(4, 20, 28, 0.95)",
-            border: "1px solid rgba(45, 212, 191, 0.3)",
+            background: "rgba(8, 22, 38, 0.95)",
+            border: "1px solid var(--glass-border)",
             borderBottomLeftRadius: "8px",
             borderBottomRightRadius: "8px",
             fontSize: "12px",
@@ -1378,7 +1379,7 @@ function KqlCodeEditor({
           title="Click to expand editor"
         >
           <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <span style={{ color: "#34d399", fontWeight: 700 }}>Minimized Editor: </span>
+            <span style={{ color: "#38bdf8", fontWeight: 700 }}>Minimized Editor: </span>
             <span>{query.replace(/\n/g, " | ")}</span>
           </div>
           <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: 600, marginLeft: "12px", flexShrink: 0 }}>
@@ -1432,11 +1433,11 @@ function KqlCodeEditor({
                 width: "360px",
                 maxWidth: "calc(100% - 32px)",
                 maxHeight: "260px",
-                background: "rgba(4, 20, 28, 0.98)",
-                backdropFilter: "blur(12px)",
-                border: "1px solid rgba(16, 185, 129, 0.6)",
+                background: "var(--glass-popover)",
+                backdropFilter: "var(--glass-blur-deep)",
+                border: "1px solid var(--glass-border)",
                 borderRadius: "8px",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
+                boxShadow: "var(--glass-shadow-deep)",
                 zIndex: 3000,
                 padding: "4px",
                 overflow: "hidden",
@@ -1449,9 +1450,9 @@ function KqlCodeEditor({
               style={{
                 padding: "6px 10px",
                 fontSize: "11px",
-                color: "#34d399",
-                background: "rgba(16, 185, 129, 0.2)",
-                borderBottom: "1px solid rgba(16, 185, 129, 0.3)",
+                color: "#38bdf8",
+                background: "rgba(24, 86, 255, 0.18)",
+                borderBottom: "1px solid var(--glass-border)",
                 fontWeight: 700,
                 display: "flex",
                 alignItems: "center",
@@ -1476,8 +1477,8 @@ function KqlCodeEditor({
                   item.type === "table" ? "📋" : "⚙️";
 
                 const typeColor =
-                  item.type === "column" ? "#34d399" :
-                  item.type === "command" ? "#38bdf8" :
+                  item.type === "column" ? "#38bdf8" :
+                  item.type === "command" ? "#60a5fa" :
                   item.type === "function" ? "#fbbf24" :
                   item.type === "table" ? "#a78bfa" : "#94a3b8";
 
@@ -1487,7 +1488,7 @@ function KqlCodeEditor({
                     style={{
                       padding: "6px 10px",
                       borderRadius: "4px",
-                      background: isSelected ? "rgba(16, 185, 129, 0.25)" : "transparent",
+                      background: isSelected ? "rgba(24, 86, 255, 0.25)" : "transparent",
                       color: isSelected ? "#ffffff" : "#f8fafc",
                       cursor: "pointer",
                       display: "flex",
@@ -1805,10 +1806,10 @@ function GraphicalWorkspaceSelect({
           maxWidth: "340px",
           height: "34px",
           padding: "5px 12px",
-          background: "rgba(15, 23, 42, 0.7)",
-          border: `1px solid ${isOpen ? "#34d399" : "rgba(45, 212, 191, 0.35)"}`,
+          background: "var(--glass-surface-elevated)",
+          border: `1px solid ${isOpen ? "#1856FF" : "var(--glass-border)"}`,
           borderRadius: "6px",
-          color: selectedWs ? "#34d399" : "#94a3b8",
+          color: selectedWs ? "#38bdf8" : "#94a3b8",
           fontSize: "12px",
           fontWeight: 600,
           display: "inline-flex",
@@ -1816,7 +1817,7 @@ function GraphicalWorkspaceSelect({
           justifyContent: "space-between",
           gap: "8px",
           cursor: "pointer",
-          boxShadow: isOpen ? "0 0 15px rgba(52, 211, 153, 0.25)" : "none",
+          boxShadow: isOpen ? "0 0 15px rgba(24, 86, 255, 0.3)" : "none",
           transition: "all 0.2s ease"
         }}
       >
@@ -1837,12 +1838,12 @@ function GraphicalWorkspaceSelect({
             left: 0,
             minWidth: "300px",
             zIndex: 99999,
-            background: "rgba(4, 18, 27, 0.98)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            border: "1px solid rgba(52, 211, 153, 0.4)",
+            background: "var(--glass-popover)",
+            backdropFilter: "var(--glass-blur-deep)",
+            WebkitBackdropFilter: "var(--glass-blur-deep)",
+            border: "1px solid var(--glass-border)",
             borderRadius: "10px",
-            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.85), 0 0 20px rgba(52, 211, 153, 0.15)",
+            boxShadow: "var(--glass-shadow-deep), 0 0 20px rgba(24, 86, 255, 0.2)",
             padding: "8px",
             maxHeight: "300px",
             display: "flex",
@@ -1885,9 +1886,9 @@ function GraphicalWorkspaceSelect({
                     padding: "8px 10px",
                     borderRadius: "6px",
                     background: isSelected
-                      ? "linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(56, 189, 248, 0.15))"
+                      ? "linear-gradient(135deg, rgba(24, 86, 255, 0.25), rgba(56, 189, 248, 0.15))"
                       : "rgba(15, 23, 42, 0.4)",
-                    border: `1px solid ${isSelected ? "rgba(52, 211, 153, 0.6)" : "transparent"}`,
+                    border: `1px solid ${isSelected ? "rgba(24, 86, 255, 0.6)" : "transparent"}`,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -1897,7 +1898,7 @@ function GraphicalWorkspaceSelect({
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#34d399" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: isSelected ? "#38bdf8" : "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         🏢 {ws.name}
                       </span>
                       {ws.subscriptionName && (
@@ -1911,7 +1912,7 @@ function GraphicalWorkspaceSelect({
                     </span>
                   </div>
                   {isSelected && (
-                    <span style={{ fontSize: "11px", color: "#34d399", fontWeight: 700, background: "rgba(16,185,129,0.2)", padding: "2px 6px", borderRadius: "4px", flexShrink: 0 }}>
+                    <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: 700, background: "rgba(24, 86, 255, 0.2)", padding: "2px 6px", borderRadius: "4px", flexShrink: 0 }}>
                       ✓ Selected
                     </span>
                   )}
@@ -2686,12 +2687,32 @@ export function App() {
     initWorkspaces();
   }, [isAuthenticated, accounts]);
 
+  useEffect(() => {
+    const currentPath = window.location.pathname;
+    const loginUri = getEnv("VITE_AZURE_LOGIN_URI") || "/auth/login";
+    const callbackUri = getEnv("VITE_AZURE_REDIRECT_URI") || "/auth/callback";
+
+    if (currentPath === loginUri || currentPath === callbackUri) {
+      if (isAuthenticated) {
+        window.history.replaceState(null, "", "/");
+      }
+    }
+  }, [isAuthenticated]);
+
   function handleLogin() {
-    instance.loginPopup(loginRequest).then(() => loadWorkspaces()).catch(e => console.error(e));
+    instance.loginRedirect(loginRequest).catch((e) => {
+      console.warn("loginRedirect failed, falling back to loginPopup:", e);
+      instance.loginPopup(loginRequest).then(() => loadWorkspaces()).catch((err) => console.error(err));
+    });
   }
 
   function handleLogout() {
-    instance.logoutPopup().catch(e => console.error(e));
+    instance.logoutRedirect({
+      postLogoutRedirectUri: window.location.origin + (getEnv("VITE_AZURE_LOGIN_URI") || "/auth/login")
+    }).catch((e) => {
+      console.warn("logoutRedirect failed, falling back to logoutPopup:", e);
+      instance.logoutPopup().catch((err) => console.error(err));
+    });
   }
 
   const clientIdConfigured = Boolean(
@@ -2975,7 +2996,7 @@ export function App() {
       if (dynamicFilterSeqRef.current !== currentSeq) return;
       const filter = preset.dynamicFilters[i];
       try {
-        let q = `${cleanBase}\n| where TimeGenerated > ago(24h)`;
+        let q = `${cleanBase}\n| where TimeGenerated > ago(7d)`;
 
         // Append clauses for any preceding filters that have a selection (e.g. Resource / AccountName filter first)
         for (let j = 0; j < i; j++) {
@@ -2992,7 +3013,7 @@ export function App() {
         try {
           res = await runQuery({
             query: q,
-            timespan: "PT24H",
+            timespan: "P7D",
             workspaceId: targetWs,
             filters: [],
             token
@@ -3011,7 +3032,7 @@ export function App() {
 
           res = await runQuery({
             query: fallbackQ,
-            timespan: "PT24H",
+            timespan: "P7D",
             workspaceId: targetWs,
             filters: [],
             token
@@ -3210,7 +3231,7 @@ export function App() {
             fontSize: "1.75rem",
             fontWeight: 800,
             margin: 0,
-            background: "linear-gradient(90deg, #38bdf8 0%, #2dd4bf 50%, #34d399 100%)",
+            background: "linear-gradient(90deg, #0AB68B 0%, #92DE8B 50%, #FFE3B3 100%)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
             letterSpacing: "-0.5px"
@@ -3228,14 +3249,14 @@ export function App() {
           )}
           <button 
             className="primary-button" 
-            style={{ background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)" }}
+            style={{ background: "linear-gradient(90deg, #0AB68B 0%, #028174 100%)" }}
             onClick={() => setIsChatOpen(!isChatOpen)}
           >
             <MessageSquare size={17} />
             <span>Ask AI</span>
           </button>
           {isAuthenticated && (
-            <button className="primary-button" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)" }} onClick={handleLogout}>
+            <button className="primary-button" style={{ background: "transparent", border: "1px solid rgba(10, 182, 139, 0.35)" }} onClick={handleLogout}>
               <LogOut size={17} />
               <span>Sign Out</span>
             </button>
@@ -3286,9 +3307,9 @@ export function App() {
         </div>
 
         <div className="query-panel">
-          <div className="panel-header">
+          <div className="panel-header" style={{ position: "relative", zIndex: 20000 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <h2 style={{ color: "#38bdf8" }}>KQL Query</h2>
+              <h2 style={{ color: "#92DE8B" }}>KQL Query</h2>
             </div>
             <div className="toolbar" style={{ display: "flex", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -3299,22 +3320,22 @@ export function App() {
                 />
                 {timespan === "CUSTOM" && (
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.85rem" }}>
-                    <input 
-                      type="datetime-local" 
+                    <GlassDateTimePicker
                       value={customStart}
-                      onChange={e => handleCustomTimeChange(e.target.value, customEnd)}
+                      onChange={(newVal) => handleCustomTimeChange(newVal, customEnd)}
+                      placeholder="Start Time"
                     />
-                    <span>to</span>
-                    <input 
-                      type="datetime-local" 
+                    <span style={{ color: "#92DE8B", fontWeight: 700, fontSize: "12px" }}>to</span>
+                    <GlassDateTimePicker
                       value={customEnd}
-                      onChange={e => handleCustomTimeChange(customStart, e.target.value)}
+                      onChange={(newVal) => handleCustomTimeChange(customStart, newVal)}
+                      placeholder="End Time"
                     />
                   </div>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(10, 44, 58, 0.9)", padding: "4px 10px", borderRadius: "8px", border: "1px solid rgba(45, 212, 191, 0.28)", height: "36px" }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8", whiteSpace: "nowrap" }}>Max Rows:</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--glass-surface-elevated)", padding: "4px 10px", borderRadius: "8px", border: "1px solid var(--glass-border)", height: "36px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "#92DE8B", whiteSpace: "nowrap" }}>Max Rows:</span>
                 <select
                   value={maxRows}
                   onChange={(e) => {
@@ -3325,7 +3346,7 @@ export function App() {
                   style={{
                     background: "transparent",
                     border: "none",
-                    color: "#34d399",
+                    color: "#92DE8B",
                     fontSize: "13px",
                     fontWeight: 700,
                     outline: "none",
@@ -3333,13 +3354,13 @@ export function App() {
                   }}
                   aria-label="Max rows"
                 >
-                  <option value={100} style={{ background: "#06202c", color: "#f8fafc" }}>100 rows</option>
-                  <option value={500} style={{ background: "#06202c", color: "#f8fafc" }}>500 rows</option>
-                  <option value={1000} style={{ background: "#06202c", color: "#f8fafc" }}>1,000 rows (Default)</option>
-                  <option value={2500} style={{ background: "#06202c", color: "#f8fafc" }}>2,500 rows</option>
-                  <option value={5000} style={{ background: "#06202c", color: "#f8fafc" }}>5,000 rows</option>
-                  <option value={10000} style={{ background: "#06202c", color: "#f8fafc" }}>10,000 rows</option>
-                  <option value={50000} style={{ background: "#06202c", color: "#f8fafc" }}>50,000 rows</option>
+                  <option value={100} style={{ background: "#061826", color: "#f8fafc" }}>100 rows</option>
+                  <option value={500} style={{ background: "#061826", color: "#f8fafc" }}>500 rows</option>
+                  <option value={1000} style={{ background: "#061826", color: "#f8fafc" }}>1,000 rows (Default)</option>
+                  <option value={2500} style={{ background: "#061826", color: "#f8fafc" }}>2,500 rows</option>
+                  <option value={5000} style={{ background: "#061826", color: "#f8fafc" }}>5,000 rows</option>
+                  <option value={10000} style={{ background: "#061826", color: "#f8fafc" }}>10,000 rows</option>
+                  <option value={50000} style={{ background: "#061826", color: "#f8fafc" }}>50,000 rows</option>
                 </select>
               </div>
               <button
@@ -3362,14 +3383,14 @@ export function App() {
             </div>
           </div>
 
-          <div className="workspace-controls-bar" style={{ position: "relative", zIndex: 10000 }}>
+          <div className="workspace-controls-bar" style={{ position: "relative", zIndex: 100 }}>
             {/* Left Section: Azure Subscription & Workspace */}
             <div className="workspace-controls-group">
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span className="dynamic-filter-label" style={{ color: "#38bdf8", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   🏢 Azure Subscription & Workspace
                 </span>
-                <span className="filter-count" style={{ fontSize: "11px", color: "#99f6e4", background: "rgba(45, 212, 191, 0.12)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(45, 212, 191, 0.25)" }}>
+                <span className="filter-count" style={{ fontSize: "11px", color: "#38bdf8", background: "rgba(24, 86, 255, 0.15)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(24, 86, 255, 0.3)" }}>
                   {uniqueSubscriptions.length} {uniqueSubscriptions.length === 1 ? "subscription" : "subscriptions"} · {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
                 </span>
               </div>
@@ -3524,14 +3545,14 @@ export function App() {
 
             {/* Main Dynamic Filters Section (Dropdown Style) */}
             {activePreset && activePreset.dynamicFilters && activePreset.dynamicFilters.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", backgroundColor: "rgba(15, 23, 42, 0.4)", borderRadius: "8px", border: "1px solid rgba(45, 212, 191, 0.2)", marginBottom: "16px", position: "relative", zIndex: openDynamicField ? 9999 : 5 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", backgroundColor: "var(--glass-surface)", borderRadius: "10px", border: "1px solid var(--glass-border)", marginBottom: "16px", position: "relative", zIndex: openDynamicField ? 9999 : 5 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: "6px" }}>
                     <SlidersHorizontal size={16} color="#38bdf8" />
                     <span>Dynamic Filters:</span>
                   </span>
                   {totalActiveDynamicFilters > 0 ? (
-                    <span style={{ fontSize: "12px", color: "#34d399", fontWeight: 600 }}>
+                    <span style={{ fontSize: "12px", color: "#38bdf8", fontWeight: 600 }}>
                       ✓ {totalActiveDynamicFilters} filter {totalActiveDynamicFilters === 1 ? "value" : "values"} selected
                     </span>
                   ) : (
@@ -3570,9 +3591,9 @@ export function App() {
                             setOpenDynamicField(isOpen ? null : filter.field);
                           }}
                           style={{
-                            background: hasSelection ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.7)",
-                            border: `1px solid ${hasSelection ? "#10b981" : "rgba(56, 189, 248, 0.3)"}`,
-                            color: hasSelection ? "#34d399" : "#f8fafc",
+                            background: hasSelection ? "rgba(24, 86, 255, 0.22)" : "var(--glass-surface-elevated)",
+                            border: `1px solid ${hasSelection ? "#1856FF" : "var(--glass-border)"}`,
+                            color: hasSelection ? "#38bdf8" : "#f8fafc",
                             padding: "8px 14px",
                             borderRadius: "8px",
                             fontSize: "13px",
@@ -3584,11 +3605,11 @@ export function App() {
                             transition: "all 0.2s"
                           }}
                         >
-                          <SlidersHorizontal size={15} color={hasSelection ? "#10b981" : "#38bdf8"} />
+                          <SlidersHorizontal size={15} color={hasSelection ? "#38bdf8" : "#94a3b8"} />
                           <span>
                             {filter.label}{" "}
                             {hasSelection ? (
-                              <strong style={{ color: "#34d399" }}>({selectedVals.length} selected)</strong>
+                              <strong style={{ color: "#38bdf8" }}>({selectedVals.length} selected)</strong>
                             ) : (
                               <span style={{ color: "#94a3b8" }}>(0 selected)</span>
                             )}
@@ -3742,9 +3763,9 @@ export function App() {
                       setDropdownSearch("");
                     }}
                     style={{
-                      background: presetOptions.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
-                      border: `1px solid ${presetOptions.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                      color: presetOptions.size > 0 ? "#34d399" : "#94a3b8",
+                      background: presetOptions.size > 0 ? "rgba(24, 86, 255, 0.22)" : "var(--glass-surface-elevated)",
+                      border: `1px solid ${presetOptions.size > 0 ? "#1856FF" : "var(--glass-border)"}`,
+                      color: presetOptions.size > 0 ? "#38bdf8" : "#94a3b8",
                       padding: "8px 14px",
                       borderRadius: "8px",
                       fontSize: "13px",
@@ -3756,7 +3777,7 @@ export function App() {
                       transition: "all 0.2s"
                     }}
                   >
-                    <SlidersHorizontal size={15} color="#10b981" />
+                    <SlidersHorizontal size={15} color="#38bdf8" />
                     <span>Filter Conditions ({presetOptions.size} / {activePreset.options.length})</span>
                     {openDropdown === "conditions" ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
@@ -3832,10 +3853,10 @@ export function App() {
                                     value={currentOp}
                                     onChange={(e) => handleOptionOperatorChange(opt, e.target.value)}
                                     style={{
-                                      background: "rgba(4, 20, 28, 0.95)",
-                                      border: "1px solid rgba(16, 185, 129, 0.4)",
+                                      background: "rgba(8, 22, 38, 0.95)",
+                                      border: "1px solid var(--glass-border)",
                                       borderRadius: "4px",
-                                      color: "#34d399",
+                                      color: "#38bdf8",
                                       fontSize: "11px",
                                       fontWeight: 700,
                                       padding: "3px 6px",
@@ -3861,8 +3882,8 @@ export function App() {
                                     placeholder={currentOp === "between" ? "400 .. 599" : "value..."}
                                     style={{
                                       width: "160px",
-                                      background: "rgba(4, 20, 28, 0.95)",
-                                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                                      background: "rgba(8, 22, 38, 0.95)",
+                                      border: "1px solid var(--glass-border)",
                                       borderRadius: "4px",
                                       color: "#f8fafc",
                                       fontSize: "11px",
@@ -3879,8 +3900,8 @@ export function App() {
                       {hoveredCondition && (
                         <div style={{
                           padding: "6px 12px",
-                          background: "rgba(4, 23, 32, 0.95)",
-                          borderTop: "1px solid rgba(16, 185, 129, 0.3)",
+                          background: "rgba(8, 22, 38, 0.95)",
+                          borderTop: "1px solid var(--glass-border)",
                           fontSize: "11px",
                           color: "#38bdf8",
                           fontFamily: "monospace",
@@ -3889,7 +3910,7 @@ export function App() {
                           textOverflow: "ellipsis"
                         }}>
                           <span>⚡ KQL Preview: </span>
-                          <span style={{ color: "#34d399" }}>
+                          <span style={{ color: "#38bdf8" }}>
                             {buildOptionClause(hoveredCondition, optionOperators[hoveredCondition.label], optionValues[hoveredCondition.label])}
                           </span>
                         </div>
@@ -3909,9 +3930,9 @@ export function App() {
                       setDropdownSearch("");
                     }}
                     style={{
-                      background: presetProjectColumns.size > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(15, 23, 42, 0.6)",
-                      border: `1px solid ${presetProjectColumns.size > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                      color: presetProjectColumns.size > 0 ? "#34d399" : "#94a3b8",
+                      background: presetProjectColumns.size > 0 ? "rgba(24, 86, 255, 0.22)" : "var(--glass-surface-elevated)",
+                      border: `1px solid ${presetProjectColumns.size > 0 ? "#1856FF" : "var(--glass-border)"}`,
+                      color: presetProjectColumns.size > 0 ? "#38bdf8" : "#94a3b8",
                       padding: "8px 14px",
                       borderRadius: "8px",
                       fontSize: "13px",
@@ -4925,9 +4946,9 @@ function ResultTable({
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              background: globalWrapText ? "rgba(45, 212, 191, 0.25)" : "rgba(45, 212, 191, 0.12)",
-              borderColor: globalWrapText ? "#2dd4bf" : "rgba(45, 212, 191, 0.22)",
-              color: globalWrapText ? "#34d399" : "#f8fafc"
+              background: globalWrapText ? "rgba(24, 86, 255, 0.25)" : "var(--glass-surface-elevated)",
+              borderColor: globalWrapText ? "#1856FF" : "var(--glass-border)",
+              color: globalWrapText ? "#38bdf8" : "#f8fafc"
             }}
           >
             <SlidersHorizontal size={15} />
@@ -5108,8 +5129,8 @@ function ResultTable({
               setPage(0);
             }}
             style={{
-              background: "rgba(6, 32, 44, 0.9)",
-              border: "1px solid rgba(45, 212, 191, 0.3)",
+              background: "var(--glass-surface-elevated)",
+              border: "1px solid var(--glass-border)",
               borderRadius: "6px",
               padding: "4px 8px",
               color: "#f8fafc",
@@ -5135,7 +5156,7 @@ function ResultTable({
           <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
             <div>
               <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#38bdf8", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                <BarChart3 size={18} color="#2dd4bf" />
+                <BarChart3 size={18} color="#38bdf8" />
                 <span>Summarized Column Telemetry</span>
               </h3>
               <p style={{ fontSize: "12px", color: "#94a3b8", margin: "4px 0 0 0" }}>
@@ -5171,9 +5192,9 @@ function ResultTable({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
-                  background: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "rgba(16, 185, 129, 0.25)" : "rgba(15, 23, 42, 0.6)",
-                  border: `1px solid ${(isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#10b981" : "rgba(16, 185, 129, 0.3)"}`,
-                  color: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#34d399" : "#94a3b8",
+                  background: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "rgba(24, 86, 255, 0.25)" : "var(--glass-surface-elevated)",
+                  border: `1px solid ${(isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#1856FF" : "var(--glass-border)"}`,
+                  color: (isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0 ? "#38bdf8" : "#94a3b8",
                   borderRadius: "6px"
                 }}
               >
@@ -5353,7 +5374,7 @@ function ResultTable({
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
             {/* View Scope Toggle */}
-            <div style={{ display: "inline-flex", background: "rgba(4, 20, 28, 0.8)", border: "1px solid rgba(45, 212, 191, 0.3)", borderRadius: "6px", padding: "2px" }}>
+            <div style={{ display: "inline-flex", background: "var(--glass-surface-elevated)", border: "1px solid var(--glass-border)", borderRadius: "6px", padding: "2px" }}>
               <button
                 type="button"
                 onClick={() => setSummaryScope("filtered")}
@@ -5363,8 +5384,8 @@ function ResultTable({
                   fontWeight: 600,
                   borderRadius: "4px",
                   border: "none",
-                  background: summaryScope === "filtered" ? "#10b981" : "transparent",
-                  color: summaryScope === "filtered" ? "#04141c" : "#94a3b8",
+                  background: summaryScope === "filtered" ? "#1856FF" : "transparent",
+                  color: summaryScope === "filtered" ? "#ffffff" : "#94a3b8",
                   cursor: "pointer"
                 }}
                 title="Summarize frequencies based on active filtered rows"
@@ -5380,8 +5401,8 @@ function ResultTable({
                   fontWeight: 600,
                   borderRadius: "4px",
                   border: "none",
-                  background: summaryScope === "all" ? "#10b981" : "transparent",
-                  color: summaryScope === "all" ? "#04141c" : "#94a3b8",
+                  background: summaryScope === "all" ? "#1856FF" : "transparent",
+                  color: summaryScope === "all" ? "#ffffff" : "#94a3b8",
                   cursor: "pointer"
                 }}
                 title="Summarize frequencies based on total un-filtered rows"
@@ -5394,8 +5415,8 @@ function ResultTable({
 
         {/* Active Multi-Column Filters Bar */}
         {activeValueFiltersCount > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "14px", padding: "8px 12px", background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "8px" }}>
-            <span style={{ fontSize: "12px", color: "#34d399", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "14px", padding: "8px 12px", background: "rgba(24, 86, 255, 0.15)", border: "1px solid rgba(24, 86, 255, 0.3)", borderRadius: "8px" }}>
+            <span style={{ fontSize: "12px", color: "#38bdf8", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
               <Filter size={14} /> Active Primary Filters ({activeValueFiltersCount}):
             </span>
             {Object.entries(selectedValueFilters).map(([colName, set]) => {
@@ -5408,28 +5429,37 @@ function ResultTable({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "6px",
-                    background: "rgba(6, 32, 44, 0.9)",
-                    border: "1px solid rgba(45, 212, 191, 0.4)",
+                    background: "rgba(8, 22, 38, 0.9)",
+                    border: "1px solid var(--glass-border)",
                     borderRadius: "6px",
                     padding: "3px 8px",
                     fontSize: "11px",
                     color: "#f8fafc"
                   }}
                 >
-                  <strong style={{ color: "#38bdf8" }}>{colName}</strong>
-                  <span style={{ color: "#34d399", fontWeight: 700 }}>{op}</span>
-                  <span style={{ fontFamily: "monospace", color: "#a7f3d0" }}>"{val}"</span>
+                  <span style={{ color: "#94a3b8" }}>{colName}</span>
+                  <span style={{ color: "#38bdf8", fontWeight: 700 }}>{op}</span>
+                  <strong style={{ color: "#f8fafc" }}>"{val}"</strong>
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedValueFilters((prev) => {
-                        const nextSet = new Set(prev[colName]);
+                        const nextSet = new Set(prev[colName] || []);
                         nextSet.delete(val);
                         return { ...prev, [colName]: nextSet };
                       });
                     }}
-                    style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "11px", padding: 0 }}
-                    title="Remove filter condition"
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      padding: "0 2px",
+                      display: "inline-flex",
+                      alignItems: "center"
+                    }}
+                    title="Remove filter value"
                   >
                     ✕
                   </button>
@@ -5438,19 +5468,16 @@ function ResultTable({
             })}
             <button
               type="button"
-              onClick={() => {
-                setSelectedValueFilters({});
-              }}
+              onClick={() => setSelectedValueFilters({})}
               style={{
-                background: "rgba(244, 63, 94, 0.2)",
-                border: "1px solid rgba(244, 63, 94, 0.4)",
-                color: "#fecdd3",
+                background: "rgba(234, 33, 67, 0.2)",
+                border: "1px solid rgba(234, 33, 67, 0.4)",
+                color: "#fda4af",
                 fontSize: "11px",
                 fontWeight: 600,
                 padding: "3px 8px",
                 borderRadius: "6px",
-                cursor: "pointer",
-                marginLeft: "auto"
+                cursor: "pointer"
               }}
             >
               Clear All Filters
@@ -5458,81 +5485,10 @@ function ResultTable({
           </div>
         )}
 
-        <div className="table-wrap" style={{ maxHeight: "380px", overflowY: "auto", overflowX: "hidden" }}>
-          <table style={{ width: "100%", tableLayout: "fixed" }}>
-            <thead>
-              <tr>
-                {selectedColsList.length >= 2 ? (
-                  selectedColsList.map((colName) => (
-                    <th
-                      key={colName}
-                      onClick={() => handleSummaryHeaderClick(colName)}
-                      style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" }}
-                      title={`Click to sort by ${colName}`}
-                    >
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <span>{colName}</span>
-                        {summarySortColumn === colName && (
-                          summarySortDirection === "asc" ? <ArrowUp size={13} color="#34d399" /> : <ArrowDown size={13} color="#34d399" />
-                        )}
-                      </div>
-                    </th>
-                  ))
-                ) : (
-                  <>
-                    <th
-                      onClick={() => handleSummaryHeaderClick("Column Name")}
-                      style={{ width: "22%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" }}
-                      title="Click to sort by Column Name"
-                    >
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <span>Column Name</span>
-                        {summarySortColumn === "Column Name" && (
-                          summarySortDirection === "asc" ? <ArrowUp size={13} color="#34d399" /> : <ArrowDown size={13} color="#34d399" />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSummaryHeaderClick("Distinct Output Value")}
-                      style={{ width: "53%", cursor: "pointer", userSelect: "none" }}
-                      title="Click to sort by Distinct Output Value"
-                    >
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <span>Distinct Output Value</span>
-                        {summarySortColumn === "Distinct Output Value" && (
-                          summarySortDirection === "asc" ? <ArrowUp size={13} color="#34d399" /> : <ArrowDown size={13} color="#34d399" />
-                        )}
-                      </div>
-                    </th>
-                  </>
-                )}
-                <th
-                  onClick={() => handleSummaryHeaderClick("Count")}
-                  style={{ width: "110px", textAlign: "right", cursor: "pointer", userSelect: "none" }}
-                  title="Click to sort by Count"
-                >
-                  <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", width: "100%", gap: "4px" }}>
-                    <span>Count</span>
-                    {summarySortColumn === "Count" && (
-                      summarySortDirection === "asc" ? <ArrowUp size={13} color="#34d399" /> : <ArrowDown size={13} color="#34d399" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSummaryHeaderClick("% Share")}
-                  style={{ width: "140px", cursor: "pointer", userSelect: "none" }}
-                  title="Click to sort by % Share"
-                >
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                    <span>% Share</span>
-                    {summarySortColumn === "% Share" && (
-                      summarySortDirection === "asc" ? <ArrowUp size={13} color="#34d399" /> : <ArrowDown size={13} color="#34d399" />
-                    )}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="table-container-outer">
+          <div className="table-wrap">
+            <table>
+              <tbody>
               {sortedSummarizedData.length === 0 ? (
                 <tr>
                   <td colSpan={selectedColsList.length >= 2 ? selectedColsList.length + 2 : 4} style={{ textAlign: "center", color: "#64748b", padding: "20px" }}>
@@ -5566,13 +5522,13 @@ function ResultTable({
                           </td>
                         </>
                       )}
-                      <td style={{ textAlign: "right", fontWeight: 700, color: "#34d399" }}>
+                      <td style={{ textAlign: "right", fontWeight: 700, color: "#38bdf8" }}>
                         {item.count.toLocaleString()}
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <div style={{ flex: 1, height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "3px", overflow: "hidden" }}>
-                            <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #2dd4bf, #38bdf8)", borderRadius: "3px" }} />
+                            <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #1856FF, #38bdf8)", borderRadius: "3px" }} />
                           </div>
                           <span style={{ fontSize: "11px", color: "#94a3b8", width: "42px", textAlign: "right" }}>{pct}%</span>
                         </div>
@@ -5584,7 +5540,8 @@ function ResultTable({
             </tbody>
           </table>
         </div>
-      </article>
+      </div>
+    </article>
     </article>
   );
 }
@@ -5619,4 +5576,395 @@ function toCsv(columns: QueryTable["columns"], rows: unknown[][], useLocalTime: 
 function csvEscape(value: string): string {
   if (!/[",\n]/.test(value)) return value;
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function GlassDateTimePicker({
+  value,
+  onChange,
+  placeholder = "Select date & time"
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const parsedDate = useMemo(() => {
+    if (!value) return new Date();
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }, [value]);
+
+  const [viewYear, setViewYear] = useState<number>(parsedDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState<number>(parsedDate.getMonth());
+
+  const [selectedHour, setSelectedHour] = useState<number>(parsedDate.getHours());
+  const [selectedMinute, setSelectedMinute] = useState<number>(parsedDate.getMinutes());
+
+  useEffect(() => {
+    if (!value) return;
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      setViewYear(d.getFullYear());
+      setViewMonth(d.getMonth());
+      setSelectedHour(d.getHours());
+      setSelectedMinute(d.getMinutes());
+    }
+  }, [value, isOpen]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+  function formatIso(year: number, month: number, day: number, hour: number, min: number): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${year}-${pad(month + 1)}-${pad(day)}T${pad(hour)}:${pad(min)}`;
+  }
+
+  const calendarDays = useMemo(() => {
+    const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
+    const totalDaysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+
+    const days: Array<{ day: number; isCurrentMonth: boolean; monthOffset: number }> = [];
+
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      days.push({ day: prevMonthDays - i, isCurrentMonth: false, monthOffset: -1 });
+    }
+
+    for (let i = 1; i <= totalDaysInMonth; i++) {
+      days.push({ day: i, isCurrentMonth: true, monthOffset: 0 });
+    }
+
+    const remainingCells = (42 - days.length) % 7 === 0 && days.length >= 35 ? 0 : 42 - days.length;
+    for (let i = 1; i <= remainingCells; i++) {
+      days.push({ day: i, isCurrentMonth: false, monthOffset: 1 });
+    }
+
+    return days;
+  }, [viewYear, viewMonth]);
+
+  const selectedDayNum = parsedDate.getFullYear() === viewYear && parsedDate.getMonth() === viewMonth ? parsedDate.getDate() : null;
+  const today = new Date();
+  const isTodayMonth = today.getFullYear() === viewYear && today.getMonth() === viewMonth;
+
+  function handleSelectDay(day: number, monthOffset: number) {
+    let targetYear = viewYear;
+    let targetMonth = viewMonth + monthOffset;
+    if (targetMonth < 0) {
+      targetMonth = 11;
+      targetYear -= 1;
+    } else if (targetMonth > 11) {
+      targetMonth = 0;
+      targetYear += 1;
+    }
+    const isoStr = formatIso(targetYear, targetMonth, day, selectedHour, selectedMinute);
+    onChange(isoStr);
+  }
+
+  function handleTimeChange(h: number, m: number) {
+    setSelectedHour(h);
+    setSelectedMinute(m);
+    const day = selectedDayNum || parsedDate.getDate() || 1;
+    const isoStr = formatIso(viewYear, viewMonth, day, h, m);
+    onChange(isoStr);
+  }
+
+  function handleNow() {
+    const now = new Date();
+    setViewYear(now.getFullYear());
+    setViewMonth(now.getMonth());
+    setSelectedHour(now.getHours());
+    setSelectedMinute(now.getMinutes());
+    const isoStr = formatIso(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+    onChange(isoStr);
+  }
+
+  function prevMonth() {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  }
+
+  function nextMonth() {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  }
+
+  const displayString = value ? value.replace("T", " ") : "";
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", display: "inline-block" }}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "8px",
+          background: "rgba(10, 24, 20, 0.82)",
+          backdropFilter: "blur(12px)",
+          border: isOpen ? "1px solid #0AB68B" : "1px solid var(--glass-border)",
+          borderTop: isOpen ? "1px solid #92DE8B" : "1px solid var(--glass-border-luminous)",
+          borderRadius: "8px",
+          padding: "7px 12px",
+          color: "#f8fafc",
+          fontSize: "12px",
+          fontWeight: 600,
+          cursor: "pointer",
+          boxShadow: isOpen ? "0 0 0 3px rgba(10, 182, 139, 0.35), var(--glass-specular)" : "inset 0 1px 3px rgba(0,0,0,0.3)",
+          transition: "all 0.2s ease"
+        }}
+      >
+        <Calendar size={14} color="#92DE8B" />
+        <span>{displayString || placeholder}</span>
+        <input
+          type="datetime-local"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ position: "absolute", opacity: 0, width: 0, height: 0, pointerEvents: "none" }}
+        />
+      </div>
+
+      {isOpen && (
+        <div
+          className="glass-calendar-popover"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            zIndex: 100000,
+            background: "rgba(8, 20, 16, 0.96)",
+            backdropFilter: "blur(24px) saturate(180%)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
+            border: "1px solid rgba(10, 182, 139, 0.22)",
+            borderTop: "1px solid rgba(146, 222, 139, 0.35)",
+            borderRadius: "14px",
+            boxShadow: "0 24px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.25)",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
+            width: "330px",
+            color: "#f8fafc",
+            fontFamily: "var(--font-sans)"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc", letterSpacing: "-0.2px" }}>
+              {monthNames[viewMonth]} {viewYear}
+            </span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button
+                type="button"
+                onClick={prevMonth}
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid var(--glass-border)",
+                  borderRadius: "6px",
+                  color: "#92DE8B",
+                  cursor: "pointer",
+                  width: "28px",
+                  height: "28px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "14px"
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={nextMonth}
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid var(--glass-border)",
+                  borderRadius: "6px",
+                  color: "#92DE8B",
+                  cursor: "pointer",
+                  width: "28px",
+                  height: "28px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "14px"
+                }}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px", marginBottom: "6px" }}>
+                {dayNames.map((d) => (
+                  <div key={d} style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#92DE8B", padding: "4px 0" }}>
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px" }}>
+                {calendarDays.map(({ day, isCurrentMonth, monthOffset }, idx) => {
+                  const isSelected = isCurrentMonth && day === selectedDayNum;
+                  const isToday = isCurrentMonth && isTodayMonth && day === today.getDate();
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectDay(day, monthOffset)}
+                      style={{
+                        height: "32px",
+                        width: "100%",
+                        border: isSelected
+                          ? "1px solid #FFE3B3"
+                          : isToday
+                          ? "1px solid rgba(146, 222, 139, 0.5)"
+                          : "none",
+                        borderRadius: "8px",
+                        background: isSelected
+                          ? "linear-gradient(135deg, #0AB68B 0%, #028174 100%)"
+                          : isToday
+                          ? "rgba(10, 182, 139, 0.22)"
+                          : "transparent",
+                        color: isSelected
+                          ? "#ffffff"
+                          : isCurrentMonth
+                          ? "#f8fafc"
+                          : "#475569",
+                        fontSize: "12px",
+                        fontWeight: isSelected || isToday ? 700 : 500,
+                        cursor: isCurrentMonth ? "pointer" : "default",
+                        boxShadow: isSelected ? "0 4px 14px rgba(10, 182, 139, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)" : "none",
+                        transition: "all 0.15s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected && isCurrentMonth) {
+                          e.currentTarget.style.background = "rgba(10, 182, 139, 0.25)";
+                          e.currentTarget.style.color = "#92DE8B";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected && isCurrentMonth) {
+                          e.currentTarget.style.background = isToday ? "rgba(10, 182, 139, 0.22)" : "transparent";
+                          e.currentTarget.style.color = "#f8fafc";
+                        }
+                      }}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "80px", borderLeft: "1px solid var(--glass-border)", paddingLeft: "12px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#92DE8B" }}>Time</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "10px", color: "#94a3b8" }}>Hour</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={selectedHour}
+                  onChange={(e) => handleTimeChange(Math.max(0, Math.min(23, Number(e.target.value))), selectedMinute)}
+                  style={{
+                    background: "rgba(6, 18, 14, 0.9)",
+                    border: "1px solid var(--glass-border)",
+                    borderRadius: "6px",
+                    color: "#92DE8B",
+                    padding: "4px 6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    textAlign: "center"
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "10px", color: "#94a3b8" }}>Min</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={selectedMinute}
+                  onChange={(e) => handleTimeChange(selectedHour, Math.max(0, Math.min(59, Number(e.target.value))))}
+                  style={{
+                    background: "rgba(6, 18, 14, 0.9)",
+                    border: "1px solid var(--glass-border)",
+                    borderRadius: "6px",
+                    color: "#92DE8B",
+                    padding: "4px 6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    textAlign: "center"
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--glass-border)" }}>
+            <button
+              type="button"
+              onClick={handleNow}
+              style={{
+                background: "rgba(10, 182, 139, 0.2)",
+                border: "1px solid #0AB68B",
+                borderRadius: "6px",
+                color: "#92DE8B",
+                fontSize: "11px",
+                fontWeight: 700,
+                padding: "4px 10px",
+                cursor: "pointer"
+              }}
+            >
+              Now
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              style={{
+                background: "linear-gradient(135deg, #0AB68B 0%, #028174 100%)",
+                border: "1px solid #FFE3B3",
+                borderRadius: "6px",
+                color: "#ffffff",
+                fontSize: "11px",
+                fontWeight: 700,
+                padding: "4px 14px",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(10, 182, 139, 0.4)"
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

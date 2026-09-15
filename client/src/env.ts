@@ -23,6 +23,10 @@ export function getEnv(key: string): string {
       return import.meta.env.VITE_AZURE_CLIENT_ID ?? "";
     case "VITE_AZURE_TENANT_ID":
       return import.meta.env.VITE_AZURE_TENANT_ID ?? "";
+    case "VITE_AZURE_REDIRECT_URI":
+      return import.meta.env.VITE_AZURE_REDIRECT_URI ?? "/auth/callback";
+    case "VITE_AZURE_LOGIN_URI":
+      return import.meta.env.VITE_AZURE_LOGIN_URI ?? "/auth/login";
     case "VITE_WORKSPACES":
       return import.meta.env.VITE_WORKSPACES ?? "";
     case "VITE_LOG_ANALYTICS_WORKSPACE_ID":

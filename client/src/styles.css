@@ -3,29 +3,31 @@
   --font-primary: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 
-  /* TypeUI Glassmorphism Design Tokens */
-  --glass-primary: #1856FF;
-  --glass-primary-hover: #2d6bff;
-  --glass-primary-glow: rgba(24, 86, 255, 0.45);
-  --glass-secondary: #3A344E;
-  --glass-success: #07CA6B;
-  --glass-warning: #E89558;
+  /* Kiwi Glassmorphism Design Tokens */
+  --glass-primary: #0AB68B;
+  --glass-primary-hover: #92DE8B;
+  --glass-primary-glow: rgba(10, 182, 139, 0.45);
+  --glass-secondary: #028174;
+  --glass-accent-lime: #92DE8B;
+  --glass-accent-cream: #FFE3B3;
+  --glass-success: #92DE8B;
+  --glass-warning: #FFE3B3;
   --glass-danger: #EA2143;
-  --glass-surface: rgba(10, 26, 44, 0.58);
-  --glass-surface-elevated: rgba(14, 34, 58, 0.72);
-  --glass-surface-hover: rgba(18, 42, 70, 0.65);
-  --glass-popover: rgba(8, 22, 38, 0.94);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-border-luminous: rgba(255, 255, 255, 0.22);
-  --glass-border-active: rgba(24, 86, 255, 0.7);
-  --glass-specular: inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
-  --glass-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.45);
-  --glass-shadow-lg: 0 24px 60px 0 rgba(0, 0, 0, 0.7), 0 0 24px rgba(24, 86, 255, 0.18);
+  --glass-surface: rgba(10, 24, 20, 0.65);
+  --glass-surface-elevated: rgba(14, 34, 28, 0.78);
+  --glass-surface-hover: rgba(18, 44, 36, 0.72);
+  --glass-popover: rgba(8, 20, 16, 0.95);
+  --glass-border: rgba(10, 182, 139, 0.20);
+  --glass-border-luminous: rgba(146, 222, 139, 0.35);
+  --glass-border-active: rgba(10, 182, 139, 0.85);
+  --glass-specular: inset 0 1px 0 0 rgba(255, 255, 255, 0.22);
+  --glass-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.55);
+  --glass-shadow-lg: 0 24px 60px 0 rgba(0, 0, 0, 0.8), 0 0 24px rgba(10, 182, 139, 0.25);
   --glass-blur: blur(20px) saturate(180%);
   --glass-blur-deep: blur(24px) saturate(190%);
 
   font-family: var(--font-primary);
-  background: linear-gradient(135deg, #040d18 0%, #061524 50%, #020810 100%);
+  background: linear-gradient(135deg, #031411 0%, #061e1a 50%, #020c0a 100%);
   color: #f8fafc;
 }
 
@@ -45,10 +47,10 @@ body {
   min-height: 100vh;
   font-family: var(--font-primary);
   background:
-    radial-gradient(ellipse 75% 45% at 15% -5%, rgba(24, 86, 255, 0.22), transparent 60%),
-    radial-gradient(ellipse 55% 35% at 85% 65%, rgba(7, 202, 107, 0.12), transparent 50%),
-    radial-gradient(ellipse 65% 45% at 50% 115%, rgba(24, 86, 255, 0.16), transparent 60%),
-    linear-gradient(135deg, #040d18 0%, #061524 50%, #020810 100%);
+    radial-gradient(ellipse 75% 45% at 15% -5%, rgba(10, 182, 139, 0.26), transparent 60%),
+    radial-gradient(ellipse 55% 35% at 85% 65%, rgba(146, 222, 139, 0.18), transparent 50%),
+    radial-gradient(ellipse 65% 45% at 50% 115%, rgba(255, 227, 179, 0.14), transparent 60%),
+    linear-gradient(135deg, #031411 0%, #061e1a 50%, #020c0a 100%);
   background-attachment: fixed;
   color: #f8fafc;
   -webkit-font-smoothing: antialiased;
@@ -59,23 +61,23 @@ body {
 select,
 option,
 optgroup {
-  background-color: #061826 !important;
+  background-color: #061e1a !important;
   color: #f8fafc !important;
   font-family: var(--font-primary) !important;
 }
 
 option {
   padding: 8px 12px !important;
-  background-color: #061826 !important;
+  background-color: #061e1a !important;
   color: #f8fafc !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-bottom: 1px solid rgba(10, 182, 139, 0.14) !important;
 }
 
 option:hover,
 option:focus,
 option:active,
 option:checked {
-  background-color: #1856FF !important;
+  background-color: #0AB68B !important;
   color: #ffffff !important;
 }
 
@@ -147,12 +149,12 @@ option:checked {
   background: rgba(4, 16, 26, 0.6);
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #1856FF 0%, #0c3ab8 100%);
+  background: linear-gradient(180deg, #0AB68B 0%, #028174 100%);
   border-radius: 4px;
-  box-shadow: 0 0 10px rgba(24, 86, 255, 0.4);
+  box-shadow: 0 0 10px rgba(10, 182, 139, 0.4);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #38bdf8 0%, #1856FF 100%);
+  background: linear-gradient(180deg, #92DE8B 0%, #0AB68B 100%);
 }
 
 table {
@@ -170,7 +172,7 @@ table {
   gap: 16px;
   margin-bottom: 24px;
   padding: 16px 24px;
-  background: rgba(10, 26, 44, 0.65);
+  background: rgba(10, 24, 20, 0.65);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-radius: 14px;
@@ -187,11 +189,11 @@ table {
   margin-bottom: 16px;
   overflow-x: auto;
   padding: 6px 8px;
-  background: rgba(4, 16, 28, 0.45);
+  background: rgba(6, 18, 14, 0.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(10, 182, 139, 0.14);
 }
 
 .tab-bar-list {
@@ -206,7 +208,7 @@ table {
   gap: 8px;
   padding: 8px 16px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(10, 182, 139, 0.14);
   border-radius: 9px;
   color: #94a3b8;
   font-size: 13px;
@@ -219,16 +221,16 @@ table {
 }
 
 .query-tab:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(10, 182, 139, 0.14);
   color: #f8fafc;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(146, 222, 139, 0.3);
 }
 
 .query-tab.active {
-  background: linear-gradient(135deg, rgba(24, 86, 255, 0.35) 0%, rgba(14, 56, 180, 0.45) 100%);
+  background: linear-gradient(135deg, rgba(10, 182, 139, 0.4) 0%, rgba(2, 129, 116, 0.55) 100%);
   color: #ffffff;
-  border-color: rgba(24, 86, 255, 0.7);
-  box-shadow: 0 4px 18px rgba(24, 86, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  border-color: rgba(10, 182, 139, 0.85);
+  box-shadow: 0 4px 18px rgba(10, 182, 139, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .tab-icon {
@@ -266,10 +268,10 @@ table {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  background: rgba(24, 86, 255, 0.12);
-  border: 1px dashed rgba(24, 86, 255, 0.45);
+  background: rgba(10, 182, 139, 0.15);
+  border: 1px dashed rgba(10, 182, 139, 0.45);
   border-radius: 8px;
-  color: #38bdf8;
+  color: #92DE8B;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -278,10 +280,10 @@ table {
 }
 
 .add-tab-btn:hover {
-  background: rgba(24, 86, 255, 0.25);
-  border-color: #1856FF;
+  background: rgba(10, 182, 139, 0.28);
+  border-color: #0AB68B;
   color: #ffffff;
-  box-shadow: 0 0 15px rgba(24, 86, 255, 0.35);
+  box-shadow: 0 0 15px rgba(10, 182, 139, 0.35);
 }
 
 h1,
@@ -295,7 +297,7 @@ h1 {
   font-size: 28px;
   font-weight: 800;
   font-family: var(--font-primary);
-  background: linear-gradient(90deg, #38bdf8 0%, #1856FF 50%, #60a5fa 100%);
+  background: linear-gradient(90deg, #0AB68B 0%, #92DE8B 50%, #FFE3B3 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
@@ -307,7 +309,7 @@ h2,
   font-size: 20px;
   font-weight: 700;
   font-family: var(--font-primary);
-  background: linear-gradient(90deg, #38bdf8 0%, #60a5fa 100%);
+  background: linear-gradient(90deg, #92DE8B 0%, #0AB68B 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
@@ -320,10 +322,15 @@ p {
   margin-top: 6px;
 }
 
+.panel-header {
+  position: relative;
+  z-index: 20000;
+}
+
 /* Compact Workspace & Subscription Controls Toolbar Bar (Glassmorphism Style) */
 .workspace-controls-bar {
   position: relative;
-  z-index: 10000;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -679,8 +686,10 @@ input[type="datetime-local"] {
   border-radius: 8px;
   padding: 10px 14px;
   color: #f8fafc;
+  color-scheme: dark;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
   transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: var(--font-sans);
 }
 
 .field input:focus,
@@ -691,8 +700,24 @@ input[type="datetime-local"]:focus {
 }
 
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+  filter: invert(0.8) sepia(1) saturate(5) hue-rotate(180deg);
   cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s, transform 0.15s;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  background: rgba(24, 86, 255, 0.25);
+  transform: scale(1.1);
+}
+
+input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+  color: #f8fafc;
+}
+input[type="datetime-local"]::-webkit-datetime-edit-text {
+  color: #38bdf8;
+  padding: 0 2px;
 }
 
 .query-editor {

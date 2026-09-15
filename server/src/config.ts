@@ -30,6 +30,8 @@ const envSchema = z.object({
   VITE_REQUIRE_AZURE_AD_AUTH: z.string().optional().default("false"),
   VITE_AZURE_CLIENT_ID: z.string().optional().default(""),
   VITE_AZURE_TENANT_ID: z.string().optional().default(""),
+  VITE_AZURE_REDIRECT_URI: z.string().optional().default("/auth/callback"),
+  VITE_AZURE_LOGIN_URI: z.string().optional().default("/auth/login"),
   VITE_WORKSPACES: z.string().optional().default(""),
   VITE_ALLOWED_AZURE_AD_GROUPS: z.string().optional().default("")
 });
