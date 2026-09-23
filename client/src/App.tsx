@@ -1314,6 +1314,7 @@ export function App() {
                 <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>Max Rows:</span>
                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                   <select
+                    className="max-rows-select transparent-select"
                     value={maxRows}
                     onChange={(e) => {
                       const newRows = Number(e.target.value);
@@ -1332,7 +1333,8 @@ export function App() {
                       paddingRight: "18px",
                       WebkitAppearance: "none",
                       MozAppearance: "none",
-                      appearance: "none"
+                      appearance: "none",
+                      boxShadow: "none"
                     }}
                     aria-label="Max rows"
                   >

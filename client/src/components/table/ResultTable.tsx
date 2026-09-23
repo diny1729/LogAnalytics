@@ -22,6 +22,20 @@ export interface ResultTableProps {
   workspaceId?: string;
 }
 
+function getPageNumbers(currentPage: number, totalPages: number): (number | "...")[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const page1Indexed = currentPage + 1;
+  if (page1Indexed <= 4) {
+    return [1, 2, 3, 4, 5, "...", totalPages];
+  }
+  if (page1Indexed >= totalPages - 3) {
+    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "...", page1Indexed - 1, page1Indexed, page1Indexed + 1, "...", totalPages];
+}
+
 export function ResultTable({
   table,
   query = "",
@@ -1020,16 +1034,76 @@ export function ResultTable({
       </div>
 
       <div className="pager">
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+          <button
+            onClick={() => setPage(0)}
+            disabled={page === 0}
+            title={page === 0 ? "Already on first page" : "Go to first page"}
+            style={{ padding: "6px 10px", fontSize: "12px" }}
+          >
+            First
+          </button>
+          <button
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            disabled={page === 0}
+            title={page === 0 ? "No previous page" : "Go to previous page"}
+            style={{ padding: "6px 12px", fontSize: "12px" }}
+          >
             Previous
           </button>
-          <span>Page {page + 1} of {pageCount} ({rows.length} rows)</span>
+
+          <span style={{ margin: "0 4px", fontSize: "12px", color: "var(--color-text-primary)", fontWeight: 600 }}>
+            Page {page + 1} of {pageCount} ({rows.length} rows)
+          </span>
+
+          {/* Clickable Page Numbers */}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            {getPageNumbers(page, pageCount).map((p, pIdx) =>
+              p === "..." ? (
+                <span key={`ellipsis-${pIdx}`} className="pager-ellipsis" style={{ padding: "0 4px", color: "var(--color-text-muted)" }}>
+                  …
+                </span>
+              ) : (
+                <button
+                  key={`page-${p}`}
+                  type="button"
+                  onClick={() => setPage((p as number) - 1)}
+                  className={`pager-page-btn ${(p as number) - 1 === page ? "is-active" : ""}`}
+                  style={{
+                    minWidth: "30px",
+                    height: "30px",
+                    padding: "0 6px",
+                    fontSize: "12px",
+                    fontWeight: (p as number) - 1 === page ? 700 : 500,
+                    borderRadius: "6px",
+                    background: (p as number) - 1 === page ? "#6F7B60" : "var(--glass-surface-elevated)",
+                    color: (p as number) - 1 === page ? "#FEFCFF" : "var(--color-text-primary)",
+                    border: `1px solid ${(p as number) - 1 === page ? "#6F7B60" : "var(--glass-border)"}`,
+                    cursor: (p as number) - 1 === page ? "default" : "pointer"
+                  }}
+                  title={`Go to page ${p}`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          </div>
+
           <button
             onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
             disabled={page >= pageCount - 1}
+            title={page >= pageCount - 1 ? "Already on last page" : "Go to next page"}
+            style={{ padding: "6px 12px", fontSize: "12px" }}
           >
             Next
+          </button>
+          <button
+            onClick={() => setPage(pageCount - 1)}
+            disabled={page >= pageCount - 1}
+            title={page >= pageCount - 1 ? "Already on last page" : "Go to last page"}
+            style={{ padding: "6px 10px", fontSize: "12px" }}
+          >
+            Last
           </button>
         </div>
 
@@ -1056,6 +1130,7 @@ export function ResultTable({
               cursor: "pointer"
             }}
           >
+            <option value={10}>10</option>
             <option value={25}>25</option>
             <option value={50}>50 (Default)</option>
             <option value={100}>100</option>
@@ -1581,21 +1656,76 @@ export function ResultTable({
         </div>
 
         <div className="pager" style={{ marginTop: "12px", paddingTop: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => setSummaryPage(0)}
+              disabled={summaryPage === 0}
+              title={summaryPage === 0 ? "Already on first page" : "Go to first page"}
+              style={{ padding: "6px 10px", fontSize: "12px" }}
+            >
+              First
+            </button>
             <button
               onClick={() => setSummaryPage((current) => Math.max(0, current - 1))}
               disabled={summaryPage === 0}
+              title={summaryPage === 0 ? "No previous page" : "Go to previous page"}
+              style={{ padding: "6px 12px", fontSize: "12px" }}
             >
               Previous
             </button>
-            <span>
+
+            <span style={{ margin: "0 4px", fontSize: "12px", color: "var(--color-text-primary)", fontWeight: 600 }}>
               Page {summaryPage + 1} of {summaryPageCount} ({sortedSummarizedData.length} distinct groups)
             </span>
+
+            {/* Clickable Page Numbers */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              {getPageNumbers(summaryPage, summaryPageCount).map((p, pIdx) =>
+                p === "..." ? (
+                  <span key={`summary-ellipsis-${pIdx}`} className="pager-ellipsis" style={{ padding: "0 4px", color: "var(--color-text-muted)" }}>
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={`summary-page-${p}`}
+                    type="button"
+                    onClick={() => setSummaryPage((p as number) - 1)}
+                    className={`pager-page-btn ${(p as number) - 1 === summaryPage ? "is-active" : ""}`}
+                    style={{
+                      minWidth: "30px",
+                      height: "30px",
+                      padding: "0 6px",
+                      fontSize: "12px",
+                      fontWeight: (p as number) - 1 === summaryPage ? 700 : 500,
+                      borderRadius: "6px",
+                      background: (p as number) - 1 === summaryPage ? "#6F7B60" : "var(--glass-surface-elevated)",
+                      color: (p as number) - 1 === summaryPage ? "#FEFCFF" : "var(--color-text-primary)",
+                      border: `1px solid ${(p as number) - 1 === summaryPage ? "#6F7B60" : "var(--glass-border)"}`,
+                      cursor: (p as number) - 1 === summaryPage ? "default" : "pointer"
+                    }}
+                    title={`Go to page ${p}`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            </div>
+
             <button
               onClick={() => setSummaryPage((current) => Math.min(summaryPageCount - 1, current + 1))}
               disabled={summaryPage >= summaryPageCount - 1}
+              title={summaryPage >= summaryPageCount - 1 ? "Already on last page" : "Go to next page"}
+              style={{ padding: "6px 12px", fontSize: "12px" }}
             >
               Next
+            </button>
+            <button
+              onClick={() => setSummaryPage(summaryPageCount - 1)}
+              disabled={summaryPage >= summaryPageCount - 1}
+              title={summaryPage >= summaryPageCount - 1 ? "Already on last page" : "Go to last page"}
+              style={{ padding: "6px 10px", fontSize: "12px" }}
+            >
+              Last
             </button>
           </div>
 
@@ -1622,6 +1752,7 @@ export function ResultTable({
                 cursor: "pointer"
               }}
             >
+              <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50 (Default)</option>
               <option value={100}>100</option>

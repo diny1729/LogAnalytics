@@ -426,27 +426,45 @@ html[data-theme="nordic"] body,
 }
 
 /* Custom Dropdown List & Select Styling */
-select,
+select {
+  font-family: var(--font-primary);
+  color: var(--color-text-primary);
+}
+
+select:not(.transparent-select):not(.max-rows-select) {
+  background-color: var(--glass-surface);
+}
+
 option,
 optgroup {
-  background-color: var(--color-surface) !important;
-  color: var(--color-text-primary) !important;
-  font-family: var(--font-primary) !important;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-primary);
 }
 
 option {
-  padding: 8px 12px !important;
-  background-color: var(--color-surface) !important;
-  color: var(--color-text-primary) !important;
-  border-bottom: 1px solid var(--glass-border) !important;
+  padding: 8px 12px;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 option:hover,
 option:focus,
 option:active,
 option:checked {
-  background-color: var(--color-accent-action) !important;
-  color: #ffffff !important;
+  background-color: var(--color-accent-action);
+  color: #ffffff;
+}
+
+/* Transparent select for inline badges, pills, and max-rows selectors */
+.transparent-select,
+.max-rows-select,
+select.max-rows-select {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .shell {
@@ -1537,8 +1555,49 @@ td {
 
 .pager button:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.5;
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  color: var(--color-text-muted);
   transform: none;
+  box-shadow: none;
+}
+
+.pager-page-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--glass-surface-elevated);
+  border: 1px solid var(--glass-border);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.pager-page-btn.is-active {
+  background: var(--color-accent-action);
+  border-color: var(--color-accent-hover);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(111, 123, 96, 0.3);
+}
+
+.pager-page-btn:hover:not(.is-active):not(:disabled) {
+  background: var(--glass-surface-hover);
+  border-color: var(--color-accent-action);
+}
+
+.pager-ellipsis {
+  padding: 0 4px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  user-select: none;
 }
 
 @media (max-width: 920px) {
