@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-logapp
+  labels:
+    app: redis-logapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-logapp
+  template:
+    metadata:
+      labels:
+        app: redis-logapp
+    spec:
+      containers:
+      - name: redis-logapp
+        image: redis:7-alpine
+        command:
+          - redis-server
+          - "--maxmemory"
+          - "1024mb"
+          - "--maxmemory-policy"
+          - "allkeys-lru"
+          - "--save"
+          - ""
+        ports:
+        - name: redis
+          containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1280Mi"
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-logapp-svc
+  labels:
+    app: redis-logapp
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-logapp
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379

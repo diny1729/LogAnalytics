@@ -20,13 +20,22 @@ const envSchema = z.object({
   QUERY_MAX_ROWS: z.coerce.number().int().positive().max(50000).default(50000),
   QUERY_MAX_LENGTH: z.coerce.number().int().positive().max(100000).default(20000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
-  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
   AZURE_TENANT_ID: z.string().optional(),
   AZURE_CLIENT_ID: z.string().optional(),
   AZURE_CLIENT_SECRET: z.string().optional(),
+  REDIS_HOST: z.string().optional(),
+  REDIS_PORT: z.coerce.number().int().positive().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
+  REDIS_URL: z.string().optional(),
+  REDIS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(500),
+  REDIS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === undefined || value === "true" || value === "1"),
   VITE_REQUIRE_AZURE_AD_AUTH: z.string().optional().default("false"),
   VITE_AZURE_CLIENT_ID: z.string().optional().default(""),
   VITE_AZURE_TENANT_ID: z.string().optional().default(""),

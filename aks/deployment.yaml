@@ -33,6 +33,11 @@ spec:
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 20
+        env:
+        - name: REDIS_HOST
+          value: "redis-logapp-svc"
+        - name: REDIS_PORT
+          value: "6379"
         envFrom:
         - secretRef:
             name: loganalytics-app-secret # Ensure you create this secret with your .env vars in AKS

@@ -96,7 +96,14 @@ if (Test-Path $SecretPath) {
     Write-Host "Warning: Secret manifest not found at $SecretPath. Skipping secret apply." -ForegroundColor Yellow
 }
 
-# Step 8: Apply Deployment Manifest (with dynamic image replacement)
+# Step 8: Apply Redis Cache Deployment & Service Manifest
+$RedisPath = Join-Path $ScriptDir "../aks/redis-deployment.yaml"
+if (Test-Path $RedisPath) {
+    Write-Host "Applying Redis 1GB Cache Pod and Service manifest from $RedisPath..." -ForegroundColor Green
+    kubectl apply -f $RedisPath
+}
+
+# Step 9: Apply App Deployment Manifest (with dynamic image replacement)
 $DeploymentPath = Join-Path $ScriptDir "../aks/deployment.yaml"
 if (Test-Path $DeploymentPath) {
     Write-Host "Applying Kubernetes Deployment manifest..." -ForegroundColor Green
@@ -110,14 +117,7 @@ if (Test-Path $DeploymentPath) {
     exit 1
 }
 
-# Step 9: Apply Istio Ingress (if present)
-$IngressPath = Join-Path $ScriptDir "../aks/istio-ingress.yaml"
-if (Test-Path $IngressPath) {
-    Write-Host "Applying Istio Ingress manifest..." -ForegroundColor Green
-    kubectl apply -f $IngressPath
-}
-
-# Step 9: Apply Istio Ingress (if present)
+# Step 10: Apply Istio Ingress (if present)
 $IngressPath = Join-Path $ScriptDir "../aks/istio-ingress.yaml"
 if (Test-Path $IngressPath) {
     Write-Host "Applying Istio Ingress manifest..." -ForegroundColor Green

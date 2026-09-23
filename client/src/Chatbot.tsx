@@ -11,7 +11,9 @@ export function Chatbot({ onClose }: { onClose: () => void }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (typeof messagesEndRef.current?.scrollIntoView === "function") {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   async function handleSend() {
@@ -36,7 +38,7 @@ export function Chatbot({ onClose }: { onClose: () => void }) {
     <div className="chatbot-overlay">
       <div className="chatbot-header">
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <MessageSquare size={18} color="#38bdf8" />
+          <MessageSquare size={18} color="var(--color-accent-action)" />
           <span>KQL Assistant</span>
         </div>
         <button className="close-btn" onClick={onClose}>

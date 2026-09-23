@@ -14,6 +14,18 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-msal": ["@azure/msal-browser", "@azure/msal-react"],
+          "vendor-icons": ["lucide-react"]
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000
+  },
   test: {
     environment: "jsdom",
     globals: true,

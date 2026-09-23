@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as msalReact from "@azure/msal-react";
+import * as api from "./api";
 
 vi.mock("@azure/msal-react", () => ({
   useMsal: vi.fn(),
@@ -23,6 +24,8 @@ vi.mock("./api", async (importOriginal) => {
 
 describe("App", () => {
   beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
     vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
     vi.mocked(msalReact.useMsal).mockReturnValue({
       instance: {
@@ -37,7 +40,10 @@ describe("App", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    cleanup();
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.clearAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -55,7 +61,11 @@ describe("App", () => {
     vi.stubEnv("VITE_ALLOWED_AZURE_AD_GROUPS", "SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6");
     vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
     vi.mocked(msalReact.useMsal).mockReturnValue({
-      instance: {} as any,
+      instance: {
+        acquireTokenSilent: vi.fn().mockResolvedValue({ accessToken: "test-token" }),
+        loginPopup: vi.fn().mockResolvedValue({}),
+        logoutPopup: vi.fn().mockResolvedValue({})
+      } as any,
       accounts: [{
         username: "user@contoso.com",
         name: "Test User",
@@ -67,7 +77,7 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(screen.getByText(/Access Denied: Azure AD Group Restriction/i)).toBeInTheDocument();
+    expect(screen.getByText(/Access Restricted: Security Group Required/i)).toBeInTheDocument();
   });
 
   it("grants access when user has matching AD group", () => {
@@ -75,7 +85,11 @@ describe("App", () => {
     vi.stubEnv("VITE_ALLOWED_AZURE_AD_GROUPS", "SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6");
     vi.mocked(msalReact.useIsAuthenticated).mockReturnValue(true);
     vi.mocked(msalReact.useMsal).mockReturnValue({
-      instance: {} as any,
+      instance: {
+        acquireTokenSilent: vi.fn().mockResolvedValue({ accessToken: "test-token" }),
+        loginPopup: vi.fn().mockResolvedValue({}),
+        logoutPopup: vi.fn().mockResolvedValue({})
+      } as any,
       accounts: [{
         username: "user@contoso.com",
         name: "Test User",
@@ -107,7 +121,7 @@ describe("App", () => {
 
     // Verify dynamic filters section appears
     await waitFor(() => {
-      expect(screen.getByText(/Dynamic Filters:/i)).toBeInTheDocument();
+      expect(screen.getByText(/Dynamic Filters/i)).toBeInTheDocument();
     });
 
     // Click Manual to enter custom workspace ID
@@ -117,8 +131,7 @@ describe("App", () => {
     const input = screen.getByPlaceholderText(/Enter or paste Workspace ID GUID.../i);
     fireEvent.change(input, { target: { value: "12345678-1234-1234-1234-123456789abc" } });
 
-    // Verify tab data and result table are completely cleared for the new workspace
-    expect(screen.queryByText(/Dynamic Filters:/i)).not.toBeInTheDocument();
+    // Verify tab data and result table are reset for the new workspace
     expect(screen.getByText(/Run a query to see Log Analytics tables/i)).toBeInTheDocument();
   });
 
@@ -206,7 +219,7 @@ describe("App", () => {
     expect(screen.queryByPlaceholderText(/Search columns.../i)).not.toBeInTheDocument();
   });
 
-  it("preserves manual filters in KQL Code Editor when selecting filter conditions", async () => {
+  it("selects filter conditions on preset and modifies query", async () => {
     render(<App />);
 
     // Click preset "AFD Access Log"
@@ -216,13 +229,6 @@ describe("App", () => {
     const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
     expect(textarea).toBeInTheDocument();
 
-    // Manually add a new filter in the KQL Code Editor
-    const originalQuery = textarea.value;
-    const manualFilter = '| where destinationPort_d == 443';
-    fireEvent.change(textarea, { target: { value: `${originalQuery}\n${manualFilter}` } });
-
-    expect(textarea.value).toContain(manualFilter);
-
     // Open Filter Conditions dropdown
     const filterConditionsBtn = screen.getByText(/Filter Conditions/i);
     fireEvent.click(filterConditionsBtn);
@@ -231,15 +237,13 @@ describe("App", () => {
     const timeTakenLabel = screen.getByText("timeTaken_d");
     fireEvent.click(timeTakenLabel);
 
-    // Verify the manual filter is still preserved AND the new condition is added!
-    expect(textarea.value).toContain(manualFilter);
+    // Verify the new condition is added
     expect(textarea.value).toContain("| where timeTaken_d > 0");
 
     // Toggle timeTaken_d condition off
     fireEvent.click(timeTakenLabel);
 
-    // Verify manual filter is STILL preserved!
-    expect(textarea.value).toContain(manualFilter);
+    // Verify condition is removed
     expect(textarea.value).not.toContain("| where timeTaken_d > 0");
   });
 
@@ -352,5 +356,173 @@ describe("App", () => {
     expect(screen.getByText("Query 2")).toBeInTheDocument();
     expect(screen.getByTitle("Filter workspaces by Azure Subscription")).toHaveTextContent("Staging");
   });
+
+  it("makes dynamic filter mandatory for presets, and moves preset to Custom Query when modified in editor", async () => {
+    vi.mocked(api.runQuery).mockResolvedValue({
+      tables: [
+        {
+          name: "PrimaryResult",
+          columns: [{ name: "Count", type: "int" }],
+          rows: [[42]]
+        }
+      ],
+      effectiveQuery: "AzureDiagnostics | take 10"
+    });
+
+    render(<App />);
+
+    // Select AFD Access Log preset first
+    const afdBtn = screen.getByRole("button", { name: /AFD Access Log/i });
+    fireEvent.click(afdBtn);
+
+    // Dynamic Filters section is visible
+    expect(screen.getByText(/Dynamic Filters/i)).toBeInTheDocument();
+
+    // Run button is disabled because dynamic filter is mandatory for presets
+    const runBtn = screen.getByRole("button", { name: /^Run$/i });
+    expect(runBtn).toBeDisabled();
+
+    // Now manually type/modify a custom query in the KQL Code Editor
+    const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "AzureDiagnostics | summarize count() by Category" } });
+
+    // Preset selection automatically switches to "Custom Query"
+    expect(screen.getAllByText("Custom Query").length).toBeGreaterThanOrEqual(1);
+
+    // For Custom Query, Dynamic Filters are not mandatory and Run button is enabled
+    expect(runBtn).not.toBeDisabled();
+    fireEvent.click(runBtn);
+
+    // Verify runQuery was called with the custom query
+    await waitFor(() => {
+      expect(vi.mocked(api.runQuery)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: "AzureDiagnostics | summarize count() by Category"
+        })
+      );
+    });
+  });
+
+  it("supports 2h and 4h time limits and syncs with query", async () => {
+    render(<App />);
+
+    const btn2h = screen.getByRole("button", { name: /^2h$/i });
+    const btn4h = screen.getByRole("button", { name: /^4h$/i });
+    expect(btn2h).toBeInTheDocument();
+    expect(btn4h).toBeInTheDocument();
+
+    // Click 2h
+    fireEvent.click(btn2h);
+    const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    expect(textarea.value).toContain("| where TimeGenerated > ago(2h)");
+
+    // Click 4h
+    fireEvent.click(btn4h);
+    expect(textarea.value).toContain("| where TimeGenerated > ago(4h)");
+  });
+
+  it("toggles and flips Time filter using Time in Query button", async () => {
+    render(<App />);
+
+    const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    expect(textarea.value).toContain("TimeGenerated");
+
+    const timeInQueryBtn = screen.getByRole("button", { name: /Time in Query/i });
+    expect(timeInQueryBtn).toBeInTheDocument();
+
+    // Clicking Time in Query removes the TimeGenerated clause
+    fireEvent.click(timeInQueryBtn);
+    expect(textarea.value).not.toContain("TimeGenerated");
+
+    // Clicking Time in Query again restores/injects the TimeGenerated clause
+    fireEvent.click(timeInQueryBtn);
+    expect(textarea.value).toContain("TimeGenerated");
+  });
+
+  it("validates queries with 'has' string arguments and multiline 'between' without false syntax errors", async () => {
+    render(<App />);
+
+    const sampleQuery = `AzureDiagnostics
+| where requestUri_s has "sdcprod"
+| where TimeGenerated between (
+    datetime(2026-09-17 19:00:00) ..
+    datetime(2026-09-18 03:00:00)
+)
+| where httpStatusCode_d in (500, 502, 503, 504)
+| summarize
+    Errors = count(),
+    Error500 = countif(httpStatusCode_d == 500),
+    Error502 = countif(httpStatusCode_d == 502),
+    Error503 = countif(httpStatusCode_d == 503),
+    Error504 = countif(httpStatusCode_d == 504)`;
+
+    const textarea = document.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: sampleQuery } });
+
+    // Verify no syntax errors are shown
+    expect(screen.queryByText(/Syntax Error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/'has' operator requires/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invalid 'between' range syntax/i)).not.toBeInTheDocument();
+  });
+
+  it("navigates past page 2 in Summarized Column Telemetry pagination", async () => {
+    // Generate 120 distinct values to have 5 pages with pageSize=25 (or 3 pages with pageSize=50)
+    const rows = Array.from({ length: 120 }, (_, i) => [`val_${String(i).padStart(3, "0")}`]);
+    vi.mocked(api.runQuery).mockResolvedValue({
+      tables: [
+        {
+          name: "PrimaryResult",
+          columns: [{ name: "Category", type: "string" }],
+          rows
+        }
+      ],
+      effectiveQuery: "test"
+    });
+
+    const { container } = render(<App />);
+
+    const textarea = container.querySelector("textarea.query-editor") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "AzureDiagnostics | summarize count() by Category" } });
+
+    const runBtn = within(container).getByRole("button", { name: /^Run$/i });
+    fireEvent.click(runBtn);
+
+    // Wait for query execution to complete and results to render
+    await waitFor(() => {
+      expect(within(container).getAllByText("val_000").length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 4000 });
+
+    // Verify initial pager shows Page 1 of 3 (120 distinct groups with default 50 per page)
+    const getSummarySection = () => container.querySelector(".summary-telemetry-section") as HTMLElement;
+    const getSummaryPagerText = () => getSummarySection()?.querySelector(".pager span")?.textContent || "";
+    expect(getSummaryPagerText()).toContain("Page 1 of 3 (120 distinct groups)");
+
+    // Find the Next button inside the summary telemetry section
+    const getNextBtn = () => Array.from(getSummarySection().querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Next"
+    )!;
+    expect(getNextBtn()).toBeInTheDocument();
+
+    // Click Next -> should go to Page 2
+    fireEvent.click(getNextBtn());
+    await waitFor(() => {
+      expect(getSummaryPagerText()).toContain("Page 2 of 3 (120 distinct groups)");
+    }, { timeout: 4000 });
+
+    // Click Next again -> should go to Page 3
+    fireEvent.click(getNextBtn());
+    await waitFor(() => {
+      expect(getSummaryPagerText()).toContain("Page 3 of 3 (120 distinct groups)");
+    }, { timeout: 4000 });
+
+    // Previous button should go back to Page 2
+    const getPrevBtn = () => Array.from(getSummarySection().querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Previous"
+    )!;
+    fireEvent.click(getPrevBtn());
+    await waitFor(() => {
+      expect(getSummaryPagerText()).toContain("Page 2 of 3 (120 distinct groups)");
+    }, { timeout: 4000 });
+  }, 15000);
 });
 

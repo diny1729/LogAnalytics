@@ -5,6 +5,7 @@ import { applyFilterSelections, assertSafeKql, parseFilters } from "./kql.js";
 import { queryWorkspaceLogs } from "./logAnalytics.js";
 import { generateChatResponse } from "./chat.js";
 import { parseWorkspaceEntries } from "./workspaceConfig.js";
+import { generateQueryCacheKey, getCachedQueryResult, setCachedQueryResult, clearUserCache, getRedisStatus } from "./redis.js";
 
 const router = Router();
 
@@ -34,8 +35,6 @@ router.get("/health", (_request, response) => {
     timestamp: new Date().toISOString()
   });
 });
-
-
 
 router.get("/workspaces", (_request, response) => {
   const envWorkspaces = process.env.VITE_WORKSPACES || config.VITE_WORKSPACES || "";
@@ -82,6 +81,24 @@ router.post("/query", async (request, response, next) => {
     const query = applyFilterSelections(body.query, body.filters);
     assertSafeKql(query, config.QUERY_MAX_LENGTH);
 
+    const cacheKey = generateQueryCacheKey({
+      workspaceId,
+      query,
+      timespan: body.timespan,
+      maxRows: body.maxRows,
+      userToken: token
+    });
+
+    const cachedResult = await getCachedQueryResult(cacheKey);
+    if (cachedResult) {
+      response.json({
+        ...cachedResult,
+        effectiveQuery: query,
+        cached: true
+      });
+      return;
+    }
+
     const result = await queryWorkspaceLogs({
       workspaceId,
       query,
@@ -90,9 +107,35 @@ router.post("/query", async (request, response, next) => {
       userToken: token
     });
 
+    if (result && result.tables && result.tables.length > 0 && !result.partialError) {
+      setCachedQueryResult(cacheKey, result).catch(() => {});
+    }
+
     response.json({
       ...result,
       effectiveQuery: query
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/cache/status", (_request, response) => {
+  response.json(getRedisStatus());
+});
+
+router.post("/cache/clear", async (request, response, next) => {
+  try {
+    const authHeader = request.headers.authorization;
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    }
+    const result = await clearUserCache(token);
+    response.json({
+      success: true,
+      message: `Cleared ${result.clearedCount} cached query result(s)`,
+      ...result
     });
   } catch (error) {
     next(error);

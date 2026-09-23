@@ -63,6 +63,17 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   return data as T;
 }
 
+export async function clearCacheApi(token?: string): Promise<{ success: boolean; message: string; clearedCount: number; user: string }> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return requestJson<{ success: boolean; message: string; clearedCount: number; user: string }>("/api/cache/clear", {
+    method: "POST",
+    headers
+  });
+}
+
 export async function parseQuery(query: string): Promise<ParsedFilter[]> {
   const response = await requestJson<{ filters: ParsedFilter[] }>("/api/parse", {
     method: "POST",

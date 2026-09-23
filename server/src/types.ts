@@ -25,6 +25,8 @@ export type QueryTable = {
 
 export type QueryResponse = {
   tables: QueryTable[];
+  effectiveQuery?: string;
   partialError?: string;
   statistics?: unknown;
+  cached?: boolean;
 };

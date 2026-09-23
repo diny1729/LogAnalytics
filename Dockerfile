@@ -1,30 +1,33 @@
-# Step 1: Install dependencies
-FROM node:22-alpine AS deps
+# Step 1: Install all dependencies & build application
+FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json ./
+
+# Copy root workspace manifests
+COPY package.json package-lock.json* ./
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
-RUN npm install --prefix server && npm install --prefix client
 
-# Step 2: Build client & server static assets & TypeScript
-FROM deps AS build
-WORKDIR /app
+# Install dependencies for both workspaces
+RUN npm install --no-audit
+
+# Copy source code and build dist bundles
 COPY server server
 COPY client client
-RUN npm run build --prefix server && npm run build --prefix client
+RUN npm run build
 
-# Step 3: Production Runtime
+# Prune devDependencies to keep only production packages
+RUN npm prune --omit=dev --no-audit
+
+# Step 2: Production Runtime
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy package manifests and install only production dependencies
-COPY server/package.json server/package.json
-RUN npm install --prefix server --omit=dev && npm cache clean --force
-
-# Copy built application code
-COPY --from=build /app/server/dist server/dist
-COPY --from=build /app/client/dist client/dist
+# Copy production node_modules from build stage
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/server ./server
+COPY --from=build /app/client/dist ./client/dist
 
 # Security: Run as non-root user
 USER node

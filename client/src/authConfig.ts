@@ -31,8 +31,18 @@ export const msalConfig: Configuration = {
   },
 };
 
-// Standard OpenID Connect scopes for user sign-in and profile info (does not require Azure RM admin consent)
+// Standard OpenID Connect scopes for user sign-in and profile info
 export const loginRequest = {
   scopes: ["openid", "profile", "email"],
   redirectUri: getEnv("VITE_AZURE_REDIRECT_URI") || "/auth/callback",
+};
+
+// Scopes for Azure Resource Management / Resource Graph (Workspace Discovery)
+export const armTokenRequest = {
+  scopes: ["https://management.azure.com/user_impersonation"]
+};
+
+// Scopes for Microsoft Graph API (User Profile & Group Resolution)
+export const graphTokenRequest = {
+  scopes: ["https://graph.microsoft.com/User.Read"]
 };

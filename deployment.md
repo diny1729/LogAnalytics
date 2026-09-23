@@ -19,14 +19,21 @@ Create a `.env` file in the root workspace folder. The application loads this fi
 | `QUERY_MAX_ROWS` | Number | `5000` | Maximum rows returned per query (capped at `50000`). |
 | `QUERY_MAX_LENGTH` | Number | `20000` | Maximum KQL query character length limit. |
 | `RATE_LIMIT_WINDOW_MS` | Number | `60000` | Rate limiting sliding window size in milliseconds. |
-| `RATE_LIMIT_MAX` | Number | `60` | Max API requests allowed per client IP per window. |
+| `RATE_LIMIT_MAX` | Number | `300` | Max API requests allowed per client IP per window. |
+| `REDIS_HOST` | String | `localhost` / `redis-svc` | Hostname of Redis cache service. |
+| `REDIS_PORT` | Number | `6379` | Port for Redis cache service. |
+| `REDIS_PASSWORD` | String | *Optional* | Password for Redis cache service (if enabled). |
+| `REDIS_URL` | String | *Optional* | Complete connection URL for Redis instance. |
+| `REDIS_CACHE_TTL_SECONDS`| Number | `500` | Expiration time for cached query results in seconds (default: 500s). |
+| `REDIS_ENABLED` | Boolean | `true` | Set to `false` to disable Redis query caching. |
 | `AZURE_TENANT_ID` | String | *Required for SPN* | Azure AD Directory (Tenant) ID for Service Principal. |
 | `AZURE_CLIENT_ID` | String | *Required for SPN* | Azure AD Application (Client) ID for Service Principal / Managed Identity. |
 | `AZURE_CLIENT_SECRET` | String | *Required for SPN* | Azure AD Client Secret for Service Principal. |
 | `VITE_AZURE_CLIENT_ID` | String | *Required for Login*| Frontend SPA Client ID for Microsoft Azure AD MSAL Login. |
 | `VITE_AZURE_TENANT_ID` | String | *Required for Login*| Frontend SPA Tenant ID for Microsoft Azure AD MSAL Login. |
 | `VITE_REQUIRE_AZURE_AD_AUTH` | Boolean | `true` | Set to `false` to bypass Azure AD login landing page and use backend credentials. |
-| `VITE_WORKSPACES` | String | *Optional* | Comma-separated `Name:GUID` list of predefined Log Analytics Workspaces. |
+| `VITE_ALLOWED_AZURE_AD_GROUPS`| String | *Optional* | Comma-separated Azure AD Group Object IDs/names to restrict login. |
+| `VITE_WORKSPACES` | String | *Optional* | Comma-separated `Subscription/Name:GUID` list of predefined Log Analytics Workspaces. |
 
 ---
 
@@ -173,7 +180,7 @@ To execute the complete production build, ACR push, and AKS deployment in a sing
    =================================================================
    Do you want to proceed with deploying to AKS cluster 'aks-cluster-prod'? (Y/N):
    ```
-6. **Connects & Deploys to AKS**: Connects via `az aks get-credentials` and applies Kubernetes secrets (`aks/secret.yaml`), deployments (`aks/deployment.yaml`), and Istio ingress (`aks/istio-ingress.yaml`).
+6. **Connects & Deploys to AKS**: Connects via `az aks get-credentials` and applies Kubernetes secrets (`aks/secret.yaml`), Redis 1GB cache (`aks/redis-deployment.yaml`), app deployment (`aks/deployment.yaml`), and Istio ingress (`aks/istio-ingress.yaml`).
 7. **Monitors Rollout**: Tracks `kubectl rollout status deployment/loganalytics-app`.
 
 ---

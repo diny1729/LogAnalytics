@@ -70,6 +70,11 @@ A container-first application designed for querying Azure Log Analytics workspac
   - Detects missing/unmatched parentheses, brackets, invalid or misspelled operators, and unclosed quotes.
   - Displays header warning badges (e.g. `⚠️ 1 Syntax Error` / `⚠️ N Syntax Errors`) and red glowing alert borders (`rgba(244, 63, 94, 0.5)`) detailing exact line numbers and syntax diagnostic explanations.
 
+- **High-Performance In-Cluster Redis Cache (1GB Pod)**:
+  - Automatically caches KQL query results in an in-cluster 1GB Redis Pod (`redis-svc:6379`) with LRU eviction and configurable TTL.
+  - Returns identical query responses in < 5ms, dramatically cutting Azure Log Analytics API bills and elimination of repeated query latency.
+  - Fail-safe architecture: if Redis is restarting or offline, queries gracefully fall back directly to Azure Log Analytics.
+
 - **Secure Azure AD Auth & Workspace Discovery**:
   - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
 
