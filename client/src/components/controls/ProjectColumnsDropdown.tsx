@@ -58,6 +58,8 @@ export function ProjectColumnsDropdown({
           <div className="dropdown-search-box">
             <Search size={14} className="search-icon" />
             <input
+              id="project-columns-search"
+              name="projectColumnsSearch"
               type="text"
               placeholder="Search columns..."
               value={dropdownSearch}
@@ -74,7 +76,7 @@ export function ProjectColumnsDropdown({
           <div className="dropdown-list" style={{ maxHeight: "320px" }}>
             {activePreset.projectColumns
               .filter(col => !dropdownSearch || col.toLowerCase().includes(dropdownSearch.toLowerCase()))
-              .map((col) => {
+              .map((col, idx) => {
                 const checked = presetProjectColumns.has(col);
                 return (
                   <div
@@ -84,6 +86,8 @@ export function ProjectColumnsDropdown({
                     style={{ flexShrink: 0, minHeight: "32px", display: "flex", alignItems: "center", gap: "8px" }}
                   >
                     <input
+                      id={`project-col-checkbox-${idx}`}
+                      name={`projectCol_${col}`}
                       type="checkbox"
                       checked={checked}
                       onChange={() => {}}

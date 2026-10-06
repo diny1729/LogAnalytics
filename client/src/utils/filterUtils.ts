@@ -142,14 +142,15 @@ export function evaluateFilterCondition(
 
 export function isNumericFieldOrOp(field: string, op: string, val: string): boolean {
   if (["<", "<=", ">", ">="].includes(op)) return true;
-  const isNumericName = /(_d|_i|_long|_real|_b|_count|_port|Port|Latency|Status|Size|Length|Duration|TimeTaken)$/i.test(field) || /^timeTaken/i.test(field);
+  const isNumericName = /(_d|_i|_long|_real|_b|_count|_port|Port|Latency|Status|Size|Length|Duration|TimeTaken)$/i.test(field || "") || /^timeTaken/i.test(field || "");
   if (isNumericName) return true;
-  const trimmed = val.trim();
+  const trimmed = (val || "").trim();
   if (trimmed !== "" && !isNaN(Number(trimmed)) && !trimmed.startsWith("0x")) return true;
   return false;
 }
 
 export function buildOptionClause(opt: PresetOption, customOp?: string, customVal?: string): string {
+  if (!opt || !opt.clause) return "";
   let defaultValMatch = opt.clause.match(/"([^"]*)"/)?.[1];
   if (opt.clause.includes("between")) {
     const betweenMatch = opt.clause.match(/between\s*\(([^)]+)\)/i);
@@ -200,24 +201,24 @@ export function buildOptionClause(opt: PresetOption, customOp?: string, customVa
     : "==";
 
   const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
-  const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
+  const field = fieldMatch ? (fieldMatch[1] ?? "").trim() : (opt.label ? (opt.label.split(" ")[0] ?? "").trim() : "");
 
   const op = customOp || defaultOp;
   const rawVal = customVal !== undefined ? customVal : (defaultValMatch ?? "");
 
   if (op === "between") {
-    const cleanedVal = rawVal.replace(/^\(|\)$/g, "").trim();
+    const cleanedVal = (rawVal || "").replace(/^\(|\)$/g, "").trim();
     return `| where ${field} between (${cleanedVal || "400 .. 599"})`;
   }
   if (op === "in" || op === "!in") {
-    const trimmedVal = rawVal.trim();
+    const trimmedVal = (rawVal || "").trim();
     if (trimmedVal.startsWith("(") && trimmedVal.endsWith(")")) {
       return `| where ${field} ${op} ${trimmedVal}`;
     }
     return `| where ${field} ${op} (${trimmedVal || "502,403,404,504"})`;
   }
   if (op === "has" || op === "!has") {
-    const trimmedVal = rawVal.trim();
+    const trimmedVal = (rawVal || "").trim();
     if (trimmedVal.startsWith("(") && trimmedVal.endsWith(")")) {
       return `| where ${field} ${op} ${trimmedVal}`;
     }
@@ -235,7 +236,7 @@ export function buildOptionClause(opt: PresetOption, customOp?: string, customVa
 
   const isNumeric = isNumericFieldOrOp(field, op, rawVal);
   if (isNumeric) {
-    const numericVal = rawVal.trim() !== "" ? rawVal.trim() : "0";
+    const numericVal = (rawVal || "").trim() !== "" ? (rawVal || "").trim() : "0";
     return `| where ${field} ${op} ${numericVal}`;
   }
 

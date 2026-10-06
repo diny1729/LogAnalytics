@@ -68,6 +68,8 @@ export function FilterConditionsDropdown({
           <div className="dropdown-search-box">
             <Search size={14} className="search-icon" />
             <input
+              id="filter-conditions-search"
+              name="filterConditionsSearch"
               type="text"
               placeholder="Search conditions..."
               value={dropdownSearch}
@@ -87,7 +89,7 @@ export function FilterConditionsDropdown({
           <div className="dropdown-list" style={{ maxHeight: "320px" }}>
             {activePreset.options
               .filter(opt => !dropdownSearch || opt.label.toLowerCase().includes(dropdownSearch.toLowerCase()))
-              .map((opt) => {
+              .map((opt, idx) => {
                 const checked = presetOptions.has(opt.label) || presetOptions.has(opt.clause);
                 const defaultOp = opt.clause.includes("!contains")
                   ? "!contains"
@@ -129,6 +131,8 @@ export function FilterConditionsDropdown({
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: "0 0 240px", minWidth: "180px", overflow: "hidden" }}>
                       <input
+                        id={`condition-check-${idx}`}
+                        name={`conditionCheck_${opt.label}`}
                         type="checkbox"
                         checked={checked}
                         onChange={() => {}}
@@ -144,6 +148,8 @@ export function FilterConditionsDropdown({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <select
+                        id={`condition-op-${idx}`}
+                        name={`conditionOp_${opt.label}`}
                         value={currentOp}
                         onChange={(e) => onOperatorChange(opt, e.target.value)}
                         style={{
@@ -175,6 +181,8 @@ export function FilterConditionsDropdown({
                       </select>
 
                       <input
+                        id={`condition-val-${idx}`}
+                        name={`conditionVal_${opt.label}`}
                         type="text"
                         value={currentVal}
                         onChange={(e) => onValueChange(opt, e.target.value)}

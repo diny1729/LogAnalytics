@@ -110,6 +110,8 @@ export function GraphicalWorkspaceSelect({
           {subscriptionWorkspaces.length > 5 && (
             <div style={{ padding: "2px 4px" }}>
               <input
+                id="workspace-search-input"
+                name="workspaceSearch"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

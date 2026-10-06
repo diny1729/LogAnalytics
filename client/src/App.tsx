@@ -276,7 +276,7 @@ export function App() {
       customFilters.push({ label: "Reason", field: "Reason", clauseTemplate: (v) => formatFilterClause("Reason", v) });
     } else {
       const resultCols = result?.tables?.[0]?.columns?.map((c) => c.name) || [];
-      const priorityCols = ["Resource", "Category", "OperationName", "Name", "ResultCode", "AccountName", "CallerIpAddress", "Status", "Level"];
+      const priorityCols = ["Action", "action_s", "Resource", "Category", "OperationName", "Name", "ResultCode", "AccountName", "CallerIpAddress", "Status", "Level"];
       const matchedCols = priorityCols.filter((col) => resultCols.some((rc) => rc.toLowerCase() === col.toLowerCase()));
 
       if (matchedCols.length > 0) {
@@ -690,19 +690,6 @@ export function App() {
 
     const currentSeq = ++dynamicFilterSeqRef.current;
 
-    let token: string | undefined;
-    if (isAuthenticated && accounts.length > 0) {
-      try {
-        const tokenResponse = await instance.acquireTokenSilent({
-          scopes: ["https://api.loganalytics.io/.default"],
-          account: accounts[0]
-        });
-        token = tokenResponse.accessToken;
-      } catch (err) {
-        console.warn("Could not acquire token for dynamic filters", err);
-      }
-    }
-
     const cleanBase = preset.baseQuery
       .split(/\n\|\s*(summarize|order|project|render)\b/i)[0]
       .trim();
@@ -729,8 +716,7 @@ export function App() {
             query: q,
             timespan: "P7D",
             workspaceId: targetWs,
-            filters: [],
-            token
+            filters: []
           });
         } catch {
           let fallbackQ = `${cleanBase}`;
@@ -747,8 +733,7 @@ export function App() {
             query: fallbackQ,
             timespan: "P7D",
             workspaceId: targetWs,
-            filters: [],
-            token
+            filters: []
           });
         }
 
@@ -915,15 +900,11 @@ export function App() {
 
       let token: string | undefined;
       if (isAuthenticated && accounts.length > 0) {
-        try {
-          const tokenResponse = await instance.acquireTokenSilent({
-            scopes: ["https://api.loganalytics.io/.default"],
-            account: accounts[0]
-          });
-          token = tokenResponse.accessToken;
-        } catch (err) {
-          console.warn("Could not acquire log analytics token silently. Falling back to server credential if permitted.", err);
-        }
+        const authRes = await instance.acquireTokenSilent({
+          ...loginRequest,
+          account: accounts[0]
+        }).catch(() => null);
+        token = authRes?.accessToken || authRes?.idToken;
       }
 
       const activeCode = query
@@ -1314,6 +1295,8 @@ export function App() {
                 <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>Max Rows:</span>
                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                   <select
+                    id="max-rows-select"
+                    name="maxRows"
                     className="max-rows-select transparent-select"
                     value={maxRows}
                     onChange={(e) => {
@@ -1383,6 +1366,8 @@ export function App() {
               {isCustomInputMode ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <input
+                    id="custom-workspace-input"
+                    name="customWorkspaceId"
                     className="filter-search-field"
                     style={{
                       padding: "4px 10px",
@@ -1536,6 +1521,7 @@ export function App() {
             onSelectAll={(field, values) => selectAllDynamicFilterValues(field, values)}
             onClearAll={(field) => clearDynamicFilterValues(field)}
             onToggleValue={(field, val) => toggleDynamicFilterValue(field, val)}
+            isMandatory={Boolean(activePreset && activePreset.id !== "custom")}
           />
 
           {activePreset && activePreset.id !== "custom" && (activePreset.options.length > 0 || activePreset.projectColumns.length > 0) && (
@@ -1638,6 +1624,7 @@ export function App() {
             table={table}
             query={query}
             presetProjectColumns={presetProjectColumns}
+            activePreset={activePreset}
             workspaceId={workspaceId}
           />
         ))}

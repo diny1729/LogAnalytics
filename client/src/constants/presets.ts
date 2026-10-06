@@ -45,11 +45,11 @@ export const PRESETS: PresetQuery[] = [
   {
     id: "afd-firewall",
     name: "AFD Firewall Log",
-    description: "Front Door Web Application Firewall (WAF) block rules and client telemetry",
-    baseQuery: 'AzureDiagnostics\n| where Category contains "FrontDoorWebApplicationFirewallLog"\n| where action_s contains "Block"',
+    description: "Front Door Web Application Firewall (WAF) rule actions, blocked/allowed requests, and client telemetry",
+    baseQuery: 'AzureDiagnostics\n| where Category contains "FrontDoorWebApplicationFirewallLog"',
     options: [
       { label: "TimeGenerated", clause: '| where TimeGenerated > ago(24h)' },
-      { label: "action_s", clause: '| where action_s == ""' },
+      { label: "action_s", clause: '| where action_s == "Block"' },
       { label: "ruleName_s", clause: '| where ruleName_s == ""' },
       { label: "requestUri_s", clause: '| where requestUri_s contains ""' },
       { label: "clientIP_s", clause: '| where clientIP_s == ""' },
@@ -59,7 +59,8 @@ export const PRESETS: PresetQuery[] = [
     projectColumns: ["TimeGenerated", "Resource", "host_s", "action_s", "ruleName_s", "requestUri_s", "clientIP_s", "trackingReference_s", "socketIP_s"],
     dynamicFilters: [
       { label: "AFD Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
-      { label: "DNS Name (host_s)", field: "host_s", clauseTemplate: (val) => formatFilterClause("host_s", val) }
+      { label: "DNS Name (host_s)", field: "host_s", clauseTemplate: (val) => formatFilterClause("host_s", val) },
+      { label: "Action (action_s)", field: "action_s", clauseTemplate: (val) => formatFilterClause("action_s", val) }
     ]
   },
   {
@@ -83,7 +84,8 @@ export const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "Action", "SourceIp", "SourcePort", "DestinationIp", "DestinationPort", "DestinationFqdn", "Protocol", "RuleCollectionGroup", "RuleCollection", "Rule", "ActionReason"],
     dynamicFilters: [
-      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) }
+      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "Action", field: "Action", clauseTemplate: (val) => formatFilterClause("Action", val) }
     ]
   },
   {
@@ -111,7 +113,8 @@ export const PRESETS: PresetQuery[] = [
     ],
     projectColumns: ["TimeGenerated", "Resource", "SourceIp", "SourcePort", "DestinationPort", "Protocol", "Action", "Policy", "RuleCollectionGroup", "RuleCollection", "Rule", "ActionReason", "Fqdn", "TargetUrl", "IsTlsInspected", "WebCategory", "IsExplicitProxyRequest"],
     dynamicFilters: [
-      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) }
+      { label: "Firewall Resource Name", field: "Resource", clauseTemplate: (val) => formatFilterClause("Resource", val) },
+      { label: "Action", field: "Action", clauseTemplate: (val) => formatFilterClause("Action", val) }
     ]
   },
   {

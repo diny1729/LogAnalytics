@@ -31,5 +31,3 @@ aks
 scripts
 deploy-local.ps1
 docker-compose.yml
-Dockerfile
-.dockerignore

@@ -4,7 +4,7 @@ import { VALID_KQL_OPERATORS } from "../constants/kql";
 import { buildOptionClause } from "./filterUtils";
 
 export function findMatchingPreset(queryText: string): PresetQuery {
-  const clean = queryText.trim();
+  const clean = (queryText || "").trim();
   if (!clean) return CUSTOM_PRESET;
 
   for (const preset of PRESETS) {
@@ -84,17 +84,18 @@ export function getTimespanKql(value: string, start?: string, end?: string): str
 }
 
 export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function validateKql(query: string): KqlSyntaxError[] {
+  if (!query || typeof query !== "string") return [];
   const errors: KqlSyntaxError[] = [];
 
-  const queryWithoutVerbatimDouble = query.replace(/@"(?:[^"])*"/g, '"__STR__"');
-  const queryWithoutVerbatimSingle = queryWithoutVerbatimDouble.replace(/@'(?:[^'])*'/g, "'__STR__'");
+  const queryWithoutVerbatimDouble = query.replace(/@"(?:[^"])*"/g, (match) => '"__STR__"' + "\n".repeat(match.split("\n").length - 1));
+  const queryWithoutVerbatimSingle = queryWithoutVerbatimDouble.replace(/@'(?:[^'])*'/g, (match) => "'__STR__'" + "\n".repeat(match.split("\n").length - 1));
   const queryWithPlaceholderStrings = queryWithoutVerbatimSingle
-    .replace(/"(?:[^"\\]|\\.)*"/g, '"__STR__"')
-    .replace(/'(?:[^'\\]|\\.)*'/g, "'__STR__'");
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '"__STR__"')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "'__STR__'");
 
   const queryWithoutCaseBlocks = queryWithPlaceholderStrings.replace(/extend\s+[a-zA-Z0-9_]+\s*=\s*case\s*\([\s\S]*?\n\)/gi, (match) => {
     const lineCount = match.split("\n").length - 1;
@@ -107,17 +108,17 @@ export function validateKql(query: string): KqlSyntaxError[] {
 
   for (let i = 0; i < rawLines.length; i++) {
     const lineNum = i + 1;
-    const originalLine = rawLines[i];
-    let rawLine = processedLines[i];
+    const originalLine = rawLines[i] ?? "";
+    let rawLine = processedLines[i] ?? "";
 
     const commentIdx = originalLine.indexOf("//");
     if (commentIdx >= 0) {
       rawLine = rawLine.slice(0, commentIdx);
     }
-    const trimmed = rawLine.trim();
+    const trimmed = (rawLine ?? "").trim();
     if (!trimmed) continue;
 
-    const withoutValidPlaceholders = rawLine.replace(/"__STR__"/g, "").replace(/'__STR__'/g, "");
+    const withoutValidPlaceholders = (rawLine ?? "").replace(/"__STR__"/g, "").replace(/'__STR__'/g, "");
     if (withoutValidPlaceholders.includes('"')) {
       errors.push({ line: lineNum, message: `Unclosed double quote (") on line ${lineNum}` });
     }
@@ -135,8 +136,8 @@ export function validateKql(query: string): KqlSyntaxError[] {
       if (!pipeContent) {
         errors.push({ line: lineNum, message: `Empty pipe operator '|' on line ${lineNum}` });
       } else {
-        const firstWord = pipeContent.split(/\s+/)[0].toLowerCase();
-        if (!VALID_KQL_OPERATORS.has(firstWord) && !pipeContent.startsWith("//")) {
+        const firstWord = (pipeContent.split(/\s+/)[0] ?? "").toLowerCase();
+        if (firstWord && !VALID_KQL_OPERATORS.has(firstWord) && !pipeContent.startsWith("//")) {
           errors.push({ line: lineNum, message: `Unknown KQL operator '${firstWord}' on line ${lineNum}` });
         }
         if (firstWord === "where") {
@@ -175,12 +176,12 @@ export function validateKql(query: string): KqlSyntaxError[] {
     }
   }
 
-  const whereClauses = queryWithPlaceholderStrings.split(/\n\|\s*/);
+  const whereClauses = (queryWithPlaceholderStrings ?? "").split(/\n\|\s*/);
   for (const clause of whereClauses) {
     if (/^\s*where\b/i.test(clause)) {
       const betweenMatches = [...clause.matchAll(/\b(!?between)\b/gi)];
       for (const m of betweenMatches) {
-        const afterBetween = clause.slice((m.index ?? 0) + m[0].length).trim();
+        const afterBetween = (clause.slice((m.index ?? 0) + m[0].length) ?? "").trim();
         if (!afterBetween || afterBetween === "(") {
           errors.push({ line: 1, message: `'between' operator requires range '(min .. max)'` });
         } else if (!afterBetween.includes("..")) {
@@ -214,13 +215,13 @@ export function updateQueryConditionOption(
       ? buildOptionClause(opt, previousOp, previousVal)
       : currentClause;
 
-  const lines = query.split("\n");
-  const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
-  const field = fieldMatch ? fieldMatch[1].trim() : opt.label.split(" ")[0].trim();
+  const lines = (query || "").split("\n");
+  const fieldMatch = opt.clause ? opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i) : null;
+  const field = fieldMatch ? (fieldMatch[1] ?? "").trim() : (opt.label ? (opt.label.split(" ")[0] ?? "").trim() : "");
 
   const isMatch = (line: string) => {
-    const trimmed = line.trim();
-    if (trimmed === currentClause.trim() || trimmed === previousClause.trim() || trimmed === opt.clause.trim()) {
+    const trimmed = (line ?? "").trim();
+    if (trimmed === (currentClause || "").trim() || trimmed === (previousClause || "").trim() || trimmed === (opt.clause || "").trim()) {
       return true;
     }
     if (field && new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}(\\s|$|\\(|==|!=|>=|>|<=|<|contains|!contains|between|!between|in|!in|has|!has)`, "i").test(trimmed)) {
@@ -286,12 +287,12 @@ export function updateQueryDynamicFilter(
   prevSelected: string[] | undefined,
   nextSelected: string[] | undefined
 ): string {
-  const prevClause = prevSelected && prevSelected.length > 0 && filterObj ? filterObj.clauseTemplate(prevSelected).trim() : "";
-  const nextClause = nextSelected && nextSelected.length > 0 && filterObj ? filterObj.clauseTemplate(nextSelected).trim() : "";
+  const prevClause = prevSelected && prevSelected.length > 0 && filterObj ? (filterObj.clauseTemplate(prevSelected) ?? "").trim() : "";
+  const nextClause = nextSelected && nextSelected.length > 0 && filterObj ? (filterObj.clauseTemplate(nextSelected) ?? "").trim() : "";
 
-  const lines = query.split("\n");
+  const lines = (query || "").split("\n");
   const isMatch = (line: string) => {
-    const trimmed = line.trim();
+    const trimmed = (line ?? "").trim();
     if (prevClause && trimmed === prevClause) return true;
     if (new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}\\s+in\\s*\\(`, "i").test(trimmed)) return true;
     if (new RegExp(`^\\|\\s*where\\s+${escapeRegex(field)}\\s*==\\s*`, "i").test(trimmed)) return true;
@@ -327,7 +328,7 @@ export function updateQueryProjectColumns(
   const activeProject = preset.projectColumns.filter((c) => selectedCols.has(c));
   const newProjectLine = activeProject.length > 0 ? `| project ${activeProject.join(", ")}` : "";
 
-  const lines = query.split("\n");
+  const lines = (query || "").split("\n");
   const projectIdx = lines.findIndex((l) => /^\s*\|\s*project\b/i.test(l));
 
   if (projectIdx !== -1) {
@@ -346,12 +347,14 @@ export function updateQueryProjectColumns(
 }
 
 export function getPresetTable(preset: PresetQuery): string {
-  const line = preset.baseQuery.split("\n")[0].trim();
-  return line.split("|")[0].trim() || "LogTable";
+  if (!preset || !preset.baseQuery) return "LogTable";
+  const line = (preset.baseQuery.split("\n")[0] ?? "").trim();
+  return (line.split("|")[0] ?? "").trim() || "LogTable";
 }
 
 export function getPresetDesc(preset: PresetQuery): string {
-  return `${preset.projectColumns.length} projected columns · ${preset.options.length} filter options`;
+  if (!preset) return "";
+  return `${(preset.projectColumns || []).length} projected columns · ${(preset.options || []).length} filter options`;
 }
 
 export function generateQuery(
@@ -362,7 +365,7 @@ export function generateQuery(
   ops: Record<string, string> = {},
   vals: Record<string, string> = {}
 ): string {
-  const activeProject = preset.projectColumns.filter((c) => projectCols.has(c));
+  const activeProject = (preset.projectColumns || []).filter((c) => projectCols.has(c));
   const projectLine = activeProject.length > 0 ? `| project ${activeProject.join(", ")}` : "";
 
   const dynamicClauses =
@@ -374,12 +377,12 @@ export function generateQuery(
       })
       .filter(Boolean) || [];
 
-  const conditionClauses = preset.options
+  const conditionClauses = (preset.options || [])
     .filter((o) => conditionOptions.has(o.label) || conditionOptions.has(o.clause))
     .map((o) => buildOptionClause(o, ops[o.label], vals[o.label]));
 
   return [
-    preset.baseQuery,
+    preset.baseQuery || "",
     ...dynamicClauses,
     ...conditionClauses,
     projectLine
@@ -390,12 +393,13 @@ export function generateQuery(
 
 export function updateQueryTimespan(newQuery: string, tsValue: string, start: string, end: string): string {
   const kqlClause = getTimespanKql(tsValue, start, end);
+  if (!newQuery) return kqlClause;
   const regex = /\|\s*where\s+TimeGenerated\s+(>|between)[^\n]+/i;
   if (regex.test(newQuery)) {
     return newQuery.replace(regex, kqlClause);
   }
   const lines = newQuery.split("\n");
-  if (lines.length > 0 && lines[0].trim() && !lines[0].trim().startsWith("|")) {
+  if (lines.length > 0 && (lines[0] ?? "").trim() && !(lines[0] ?? "").trim().startsWith("|")) {
     lines.splice(1, 0, kqlClause);
     return lines.join("\n");
   }

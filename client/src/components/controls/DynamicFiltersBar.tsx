@@ -19,6 +19,7 @@ export interface DynamicFiltersBarProps {
   onSelectAll: (field: string, values: string[]) => void;
   onClearAll: (field: string) => void;
   onToggleValue: (field: string, val: string) => void;
+  isMandatory?: boolean;
 }
 
 export function DynamicFiltersBar({
@@ -33,20 +34,53 @@ export function DynamicFiltersBar({
   onSearchChange,
   onSelectAll,
   onClearAll,
-  onToggleValue
+  onToggleValue,
+  isMandatory = false
 }: DynamicFiltersBarProps) {
   if (!dynamicFilters || dynamicFilters.length === 0) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "14px", backgroundColor: "var(--glass-surface)", borderRadius: "10px", border: "1px solid var(--glass-border)", marginBottom: "16px", position: "relative", zIndex: openDynamicField ? 9999 : 5 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        padding: "14px",
+        backgroundColor: "var(--glass-surface)",
+        borderRadius: "10px",
+        border: `1px solid ${isMandatory && totalActiveDynamicFilters === 0 ? "rgba(239, 68, 68, 0.4)" : "var(--glass-border)"}`,
+        boxShadow: isMandatory && totalActiveDynamicFilters === 0 ? "0 0 0 1px rgba(239, 68, 68, 0.15)" : undefined,
+        marginBottom: "16px",
+        position: "relative",
+        zIndex: openDynamicField ? 9999 : 5
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
         <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
-          <SlidersHorizontal size={16} color="#6F7B60" />
-          <span>Dynamic Filters (Optional):</span>
+          <SlidersHorizontal size={16} color={isMandatory && totalActiveDynamicFilters === 0 ? "#ef4444" : "#6F7B60"} />
+          <span>{isMandatory ? "Dynamic Filters (Mandatory):" : "Dynamic Filters (Optional):"}</span>
+          {isMandatory && (
+            <span style={{ color: "#ef4444", fontSize: "14px", fontWeight: 800 }} title="Required for this preset">*</span>
+          )}
         </span>
         {totalActiveDynamicFilters > 0 ? (
-          <span style={{ fontSize: "12px", color: "#6F7B60", fontWeight: 600 }}>
-            ✓ {totalActiveDynamicFilters} filter {totalActiveDynamicFilters === 1 ? "value" : "values"} active
+          <span style={{ fontSize: "12px", color: "#6F7B60", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+            <span>✓</span>
+            <span>{totalActiveDynamicFilters} filter {totalActiveDynamicFilters === 1 ? "value" : "values"} active</span>
+          </span>
+        ) : isMandatory ? (
+          <span
+            style={{
+              fontSize: "12px",
+              color: "var(--glass-danger, #ef4444)",
+              fontWeight: 600,
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1px solid rgba(239, 68, 68, 0.25)",
+              padding: "2px 8px",
+              borderRadius: "4px"
+            }}
+          >
+            ⚠️ Mandatory: Select at least 1 filter option to run query
           </span>
         ) : (
           <span style={{ fontSize: "12px", color: "var(--color-text-muted)", fontWeight: 500 }}>
@@ -139,6 +173,8 @@ export function DynamicFiltersBar({
                     <div className="filter-search-box">
                       <Search size={14} className="filter-search-icon" />
                       <input
+                        id={`filter-search-${filter.field}`}
+                        name={`filterSearch_${filter.field}`}
                         type="text"
                         className="filter-search-field"
                         placeholder={`Search ${filter.label}...`}
@@ -179,7 +215,7 @@ export function DynamicFiltersBar({
                       {matchingValues.length === 0 ? (
                         <div className="dynamic-filter-empty">No matching values found</div>
                       ) : (
-                        matchingValues.map((val) => {
+                        matchingValues.map((val, idx) => {
                           const isSelected = selectedVals.includes(val);
                           return (
                             <label
@@ -187,6 +223,8 @@ export function DynamicFiltersBar({
                               className={`dynamic-filter-option-item ${isSelected ? "selected" : ""}`}
                             >
                               <input
+                                id={`filter-option-${filter.field}-${idx}`}
+                                name={`filterOption_${filter.field}`}
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => onToggleValue(filter.field, val)}

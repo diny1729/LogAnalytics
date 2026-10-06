@@ -1,18 +1,30 @@
 # Single Master Automation Script: Build, Push to ACR, Prompt Confirmation, & Deploy to AKS
+# Compatible with both Windows VM and Linux VM running PowerShell (pwsh / Windows PowerShell)
 param (
     [string]$ConfigFile = "../aks/deploy-config.json",
     [switch]$AutoApprove,
-    [string]$TagOverride
+    [string]$TagOverride,
+    [string]$Platform = "linux/amd64"
 )
 
 $ErrorActionPreference = "Stop"
 
+# Detect host OS (Windows VM vs Linux VM)
+$CurrentOS = if ($PSVersionTable.Platform) { $PSVersionTable.Platform } elseif ($IsLinux) { "Linux" } else { "Windows" }
+Write-Host "=================================================================" -ForegroundColor Cyan
+Write-Host "  LogAnalytics Production Deployment Pipeline" -ForegroundColor Cyan
+Write-Host "  Host Environment : $CurrentOS VM" -ForegroundColor Cyan
+Write-Host "  PowerShell Engine: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
+Write-Host "  Target Platform  : $Platform" -ForegroundColor Cyan
+Write-Host "=================================================================" -ForegroundColor Cyan
+
 # Determine path to config file
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not (System.IO.Path::IsPathRooted($ConfigFile))) {
-    $ResolvedConfigFile = Join-Path $ScriptDir $ConfigFile
-} else {
-    $ResolvedConfigFile = $ConfigFile
+if (-not ([System.IO.Path]::IsPathRooted($ConfigFile))) {
+    $ResolvedConfigFile = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir $ConfigFile))
+}
+else {
+    $ResolvedConfigFile = [System.IO.Path]::GetFullPath($ConfigFile)
 }
 
 if (-not (Test-Path $ResolvedConfigFile)) {
@@ -52,19 +64,38 @@ if ($SubscriptionId -and $SubscriptionId -notlike "*<*") {
 Write-Host "Authenticating with Azure Container Registry: $AcrName..." -ForegroundColor Cyan
 az acr login --name $AcrName
 
-# Step 3: Build Production Docker Image
-$RootDir = Resolve-Path "$ScriptDir/.."
+# Step 3: Build & Push Production Docker Image with Buildx
+$RootDir = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir ".."))
 $DockerfilePath = Join-Path $RootDir "Dockerfile"
 
-Write-Host "Building Production Docker image [$FullImageName]..." -ForegroundColor Green
-docker build -t $FullImageName -f $DockerfilePath $RootDir
+function Ensure-BuildxBuilder {
+    param ([string]$BuilderName = "loganalytics-builder")
+    try {
+        $builders = docker buildx ls 2>$null
+        if ($builders -notmatch $BuilderName) {
+            Write-Host "Creating and bootstrapping buildx builder instance '$BuilderName'..." -ForegroundColor Cyan
+            docker buildx create --name $BuilderName --driver docker-container --use 2>$null
+            docker buildx inspect --bootstrap 2>$null
+        } else {
+            docker buildx use $BuilderName 2>$null
+        }
+    } catch {
+        Write-Warning "Using default buildx builder instance."
+    }
+}
 
-# Step 4: Push Image to ACR
-Write-Host "Pushing Docker image to ACR [$FullImageName]..." -ForegroundColor Green
-docker push $FullImageName
+Ensure-BuildxBuilder
+
+Write-Host "Building and pushing Production Docker image with Buildx [$FullImageName] for platform [$Platform]..." -ForegroundColor Green
+docker buildx build --platform $Platform -t $FullImageName -f $DockerfilePath --push $RootDir
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Buildx failed to build and push the production image to ACR."
+    exit 1
+}
 Write-Host "Image successfully built and pushed to ACR!" -ForegroundColor Green
 
-# Step 5: Confirmation Prompt before AKS Deployment
+# Step 4: Confirmation Prompt before AKS Deployment
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Yellow
 Write-Host "                AKS DEPLOYMENT CONFIRMATION                      " -ForegroundColor Yellow
@@ -83,28 +114,29 @@ if (-not $AutoApprove) {
     }
 }
 
-# Step 6: Connect to AKS Cluster
+# Step 5: Connect to AKS Cluster
 Write-Host "Fetching AKS credentials for cluster: $ClusterName in resource group: $ResourceGroup..." -ForegroundColor Cyan
 az aks get-credentials --resource-group $ResourceGroup --name $ClusterName --overwrite-existing
 
-# Step 7: Apply Secret Manifest
-$SecretPath = Join-Path $ScriptDir "../aks/secret.yaml"
+# Step 6: Apply Secret Manifest
+$SecretPath = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir "../aks/secret.yaml"))
 if (Test-Path $SecretPath) {
     Write-Host "Applying Kubernetes Secrets from $SecretPath..." -ForegroundColor Green
     kubectl apply -f $SecretPath
-} else {
+}
+else {
     Write-Host "Warning: Secret manifest not found at $SecretPath. Skipping secret apply." -ForegroundColor Yellow
 }
 
-# Step 8: Apply Redis Cache Deployment & Service Manifest
-$RedisPath = Join-Path $ScriptDir "../aks/redis-deployment.yaml"
+# Step 7: Apply Redis Cache Deployment & Service Manifest
+$RedisPath = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir "../aks/redis-deployment.yaml"))
 if (Test-Path $RedisPath) {
     Write-Host "Applying Redis 1GB Cache Pod and Service manifest from $RedisPath..." -ForegroundColor Green
     kubectl apply -f $RedisPath
 }
 
-# Step 9: Apply App Deployment Manifest (with dynamic image replacement)
-$DeploymentPath = Join-Path $ScriptDir "../aks/deployment.yaml"
+# Step 8: Apply App Deployment Manifest (with dynamic image replacement)
+$DeploymentPath = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir "../aks/deployment.yaml"))
 if (Test-Path $DeploymentPath) {
     Write-Host "Applying Kubernetes Deployment manifest..." -ForegroundColor Green
     $DeploymentYaml = Get-Content $DeploymentPath -Raw
@@ -112,13 +144,14 @@ if (Test-Path $DeploymentPath) {
     
     # Pipe resolved manifest directly to kubectl apply
     $DeploymentYamlResolved | kubectl apply -f -
-} else {
+}
+else {
     Write-Error "Deployment manifest not found at $DeploymentPath."
     exit 1
 }
 
-# Step 10: Apply Istio Ingress (if present)
-$IngressPath = Join-Path $ScriptDir "../aks/istio-ingress.yaml"
+# Step 9: Apply Istio Ingress (if present)
+$IngressPath = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir "../aks/istio-ingress.yaml"))
 if (Test-Path $IngressPath) {
     Write-Host "Applying Istio Ingress manifest..." -ForegroundColor Green
     kubectl apply -f $IngressPath
@@ -127,7 +160,6 @@ if (Test-Path $IngressPath) {
 # Step 10: Restart Deployment 
 Write-Host "Restarting Deployment rollout..." -ForegroundColor Cyan
 kubectl rollout restart deployment/loganalytics-app
-
 
 # Step 11: Verify Rollout Status
 Write-Host "Waiting for deployment rollout to complete..." -ForegroundColor Cyan

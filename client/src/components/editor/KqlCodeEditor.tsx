@@ -93,63 +93,74 @@ export function KqlCodeEditor({
 
     if (activePreset) {
       if (activePreset.projectColumns) {
-        activePreset.projectColumns.forEach((c) => set.add(c));
+        activePreset.projectColumns.forEach((c) => {
+          if (c) set.add(c);
+        });
       }
       if (activePreset.options) {
         activePreset.options.forEach((opt) => {
+          if (!opt || !opt.clause) return;
           const fieldMatch = opt.clause.match(/\|\s*where\s+([^\s=!<]+)/i);
-          if (fieldMatch) set.add(fieldMatch[1]);
+          if (fieldMatch && fieldMatch[1]) set.add(fieldMatch[1].trim());
         });
       }
       if (activePreset.dynamicFilters) {
-        activePreset.dynamicFilters.forEach((df) => set.add(df.field));
+        activePreset.dynamicFilters.forEach((df) => {
+          if (df && df.field) set.add(df.field);
+        });
       }
     }
 
-    tableColumns.forEach((c) => set.add(c));
+    (tableColumns || []).forEach((c) => {
+      if (c) set.add(c);
+    });
 
-    const activeCode = query
+    const activeCode = (query || "")
       .split("\n")
       .map((line) => line.split("//")[0])
       .join("\n");
 
     const projectMatches = [...activeCode.matchAll(/\|\s*project\s+([^|]+)/gi)];
     projectMatches.forEach((m) => {
-      m[1].split(",").forEach((col) => {
-        const name = col.trim().split("=")[0].trim();
-        if (name) set.add(name);
-      });
+      if (m && m[1]) {
+        m[1].split(",").forEach((col) => {
+          const name = (col ?? "").trim().split("=")[0]?.trim();
+          if (name) set.add(name);
+        });
+      }
     });
 
     const extendMatches = [...activeCode.matchAll(/\|\s*extend\s+([a-zA-Z0-9_]+)\s*=/gi)];
     extendMatches.forEach((m) => {
-      if (m[1]) set.add(m[1].trim());
+      if (m && m[1]) set.add(m[1].trim());
     });
 
     const summarizeMatches = [...activeCode.matchAll(/\|\s*summarize\s+([^|]+)/gi)];
     summarizeMatches.forEach((m) => {
-      const clause = m[1];
+      const clause = m ? m[1] ?? "" : "";
       const bySplit = clause.split(/\bby\b/i);
       bySplit.forEach((part) => {
-        part.split(",").forEach((col) => {
-          const name = col.trim().split("=")[0].trim();
+        (part ?? "").split(",").forEach((col) => {
+          const name = (col ?? "").trim().split("=")[0]?.trim();
           if (name && !name.includes("(")) set.add(name);
         });
       });
     });
 
-    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: "base" }));
   }, [activePreset, tableColumns, query]);
 
   const allSuggestions = useMemo(() => {
     const list: { label: string; detail: string; type: "command" | "function" | "operator" | "keyword" | "table" | "column" }[] = [];
 
     availableColumns.forEach((col) => {
-      list.push({
-        label: col,
-        detail: `Column name (${activePreset?.name || "Query"})`,
-        type: "column"
-      });
+      if (col) {
+        list.push({
+          label: col,
+          detail: `Column name (${activePreset?.name || "Query"})`,
+          type: "column"
+        });
+      }
     });
 
     BASE_KQL_SUGGESTIONS.forEach((item) => list.push(item));
@@ -158,21 +169,23 @@ export function KqlCodeEditor({
   }, [availableColumns, activePreset]);
 
   const operatorContextSuggestions = useMemo(() => {
-    const textBeforeCursor = query.slice(0, cursorPos);
+    const textBeforeCursor = (query || "").slice(0, cursorPos);
     const opMatch = textBeforeCursor.match(/\|\s*where\s+([a-zA-Z0-9_]+)\s*(==|!=|contains|!contains|between|!between|>|<|>=|<=|has|!has|has_any|has_all|startswith|!startswith|endswith|!endswith|in|!in|in~|!in~)\s*([a-zA-Z0-9_"'()]*)$/i);
     const targetCol = opMatch ? opMatch[1] : null;
-    const operator = opMatch ? opMatch[2].toLowerCase() : null;
+    const operator = opMatch && opMatch[2] ? opMatch[2].toLowerCase() : null;
 
     const list: { label: string; detail: string; type: "command" | "function" | "operator" | "keyword" | "table" | "column" }[] = [];
 
     if (targetCol && dynamicFilterValues && dynamicFilterValues[targetCol]) {
       dynamicFilterValues[targetCol].slice(0, 15).forEach((val) => {
-        const formattedVal = /^\d+$/.test(val) ? val : `"${val}"`;
-        list.push({
-          label: formattedVal,
-          detail: `Value for ${targetCol}`,
-          type: "keyword"
-        });
+        if (val !== undefined && val !== null) {
+          const formattedVal = /^\d+$/.test(String(val)) ? String(val) : `"${val}"`;
+          list.push({
+            label: formattedVal,
+            detail: `Value for ${targetCol}`,
+            type: "keyword"
+          });
+        }
       });
     }
 
@@ -193,9 +206,9 @@ export function KqlCodeEditor({
         { label: "( 400,401,403,404,500,502,503,504 )", detail: "Comprehensive HTTP error codes set", type: "keyword" }
       );
       if (targetCol && dynamicFilterValues && dynamicFilterValues[targetCol]) {
-        const topVals = dynamicFilterValues[targetCol].slice(0, 5);
+        const topVals = (dynamicFilterValues[targetCol] || []).filter(v => v !== undefined && v !== null).slice(0, 5);
         if (topVals.length > 0) {
-          const formatted = topVals.map(v => /^\d+$/.test(v) ? v : `"${v}"`).join(", ");
+          const formatted = topVals.map(v => /^\d+$/.test(String(v)) ? String(v) : `"${v}"`).join(", ");
           list.push({
             label: `( ${formatted} )`,
             detail: `Distinct values set for ${targetCol}`,
@@ -232,7 +245,7 @@ export function KqlCodeEditor({
   }, [query, cursorPos, dynamicFilterValues]);
 
   const columnContextSuggestions = useMemo(() => {
-    const textBeforeCursor = query.slice(0, cursorPos);
+    const textBeforeCursor = (query || "").slice(0, cursorPos);
     const colMatch = textBeforeCursor.match(/(?:\|\s*where|\bwhere)\s+([a-zA-Z0-9_]+)\s*$/i);
     if (colMatch) {
       const colName = colMatch[1];
@@ -269,7 +282,7 @@ export function KqlCodeEditor({
     
     const map = new Map<string, typeof combined[0]>();
     combined.forEach(item => {
-      if (!map.has(item.label)) {
+      if (item && item.label && !map.has(item.label)) {
         map.set(item.label, item);
       }
     });
@@ -279,7 +292,7 @@ export function KqlCodeEditor({
       return uniqueList.slice(0, 30);
     }
     const term = searchPrefix.toLowerCase();
-    return uniqueList.filter((item) => item.label.toLowerCase().includes(term));
+    return uniqueList.filter((item) => item && item.label && item.label.toLowerCase().includes(term));
   }, [searchPrefix, allSuggestions, operatorContextSuggestions, columnContextSuggestions]);
 
   function updatePrefix(newQuery: string, pos: number) {
@@ -390,6 +403,13 @@ export function KqlCodeEditor({
         return;
       }
     }
+    if ((e.ctrlKey || e.shiftKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (!loading && !isRunDisabled) {
+        handleRunClick();
+      }
+      return;
+    }
     if (e.ctrlKey && e.key === " ") {
       e.preventDefault();
       const pos = textareaRef.current?.selectionStart || 0;
@@ -435,6 +455,22 @@ export function KqlCodeEditor({
           {syntaxErrors.length > 0 && (
             <span style={{ color: "var(--glass-danger)", fontSize: "11px", fontWeight: 600, background: "rgba(178, 58, 72, 0.12)", padding: "2px 6px", borderRadius: "4px" }}>
               ⚠️ {syntaxErrors.length} Syntax {syntaxErrors.length === 1 ? "Error" : "Errors"}
+            </span>
+          )}
+          {isRunDisabled && (
+            <span
+              style={{
+                color: "#d97706",
+                fontSize: "11px",
+                fontWeight: 600,
+                background: "rgba(217, 119, 6, 0.12)",
+                border: "1px solid rgba(217, 119, 6, 0.3)",
+                padding: "2px 6px",
+                borderRadius: "4px"
+              }}
+              title="Dynamic filter selection is required before running this preset"
+            >
+              ⚠️ Dynamic Filter Required
             </span>
           )}
         </span>
@@ -543,6 +579,8 @@ export function KqlCodeEditor({
       ) : (
         <div style={{ position: "relative" }}>
           <textarea
+            id="query-editor"
+            name="query"
             ref={textareaRef}
             className="query-editor"
             style={{

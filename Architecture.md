@@ -1,261 +1,301 @@
-# Azure Log Analytics KQL App - System Architecture & Design
+# Azure Log Analytics KQL Explorer — System Architecture & Technical Design
 
-This document details the technical design, component structure, authentication flow, query execution pipeline, caching layer, and local/pod container deployment architectures.
+This document details the technical architecture, component design, authentication models, multi-subscription & multi-workspace query execution pipelines, caching layers, security controls, and deployment topologies (Local Development and Azure Kubernetes Service) for the Azure Log Analytics KQL Explorer application.
 
 ---
 
-## 1. High-Level Application & Component Architecture
+## 1. System Architecture Overview
 
-The system uses a container-first, decoupled client-server architecture built with a React 18 Single Page Application (Vite, Port 5010), a Node.js Express API (Port 8080), and an in-cluster **1GB Redis Cache Pod** (`redis-logapp-svc:6379`) to accelerate repeat queries and eliminate Azure Log Analytics API latency.
+The system utilizes a container-first, decoupled client-server architecture composed of a **React 19 Single Page Application (SPA)**, a **Node.js 22 / Express API Gateway**, an in-cluster **Redis Cache Subsystem**, and deep integrations with **Azure Cloud Services** (Azure Monitor Log Analytics, Azure Resource Graph, Microsoft Entra ID, and Azure OpenAI).
+
+It is specifically architected as a **centralized multi-subscription, multi-workspace log explorer** that lets engineers view, compare, and query logs across multiple Azure subscriptions and resource groups from a single unified interface.
 
 ```mermaid
 graph TD
-    subgraph ClientLayer ["Frontend SPA (Port 5010 / Production Static Bundle)"]
-        UI["React 18 SPA (Pistachio Green Theme)"]
-        AuthUI["MSAL OAuth 2.0 Auth Component"]
-        FilterEngine["Hierarchical Dependent Filter Engine"]
-        ResultGrid["Interactive Data Table (Click-Hold Drag Reorder)"]
+    subgraph ClientLayer ["Frontend Client Layer (React 19 + TypeScript + Vite)"]
+        UI["Glassmorphism UI Engine (6 Theme Palettes)"]
+        AuthUI["MSAL OAuth 2.0 Auth Component (PKCE + Groups)"]
+        MultiSubCtrl["Multi-Subscription & Workspace Selector"]
+        TabManager["Multi-Tab Workspace State Orchestrator (Cross-Subscription)"]
+        KqlEditor["KQL Code Editor (Autocomplete & Syntax Validator)"]
+        FilterEngine["Hierarchical Dynamic Filter Engine"]
+        ResultGrid["Interactive Result Table (Click-Hold Drag Reorder)"]
+        TelemetryPanel["Summarized Telemetry (Multi-Column Grouping)"]
+        ChatbotUI["AI Query Assistant (Floating Modal)"]
     end
 
-    subgraph BackendLayer ["Backend API Service (Express - Port 8080)"]
-        Router["Express Router (/api)"]
-        ZodVal["Zod Payload & Query Validator"]
-        KqlGuard["KQL Parser & Command Guard"]
-        RedisModule["Redis Cache Layer (ioredis - redis.ts)"]
-        AzureSDK["Azure Log Analytics SDK (logAnalytics.ts)"]
+    subgraph ServerLayer ["Backend API Gateway (Node.js 22 + Express 4.21)"]
+        Middleware["Security Middleware (Helmet CSP, CORS, Rate Limiter)"]
+        RuntimeConfig["Dynamic Runtime Config Injector (/runtime-config.js)"]
+        Router["Express API Router (/api)"]
+        ZodValidator["Zod Request Schema Validator"]
+        WSParser["Multi-Subscription Workspace Parser (workspaceConfig.ts)"]
+        KqlSecurity["KQL AST Guard & Command Sanitizer (kql.ts)"]
+        RedisModule["Per-User Redis Caching Engine (redis.ts)"]
+        AzureSDK["Azure Monitor Logs Client (logAnalytics.ts)"]
+        ChatEngine["Azure OpenAI Completion Handler (chat.ts)"]
     end
 
-    subgraph CacheLayer ["In-Cluster Cache Layer (AKS)"]
-        RedisPod["Redis Cache Pod: redis-logapp (1GB maxmemory / allkeys-lru)"]
+    subgraph CacheLayer ["Caching Layer (Redis 7)"]
+        RedisInstance["Redis Cache (1GB maxmemory / allkeys-lru / Compound SHA-256 Keying)"]
     end
 
-    subgraph AzureServices ["Azure Cloud Platform"]
-        Entra["Microsoft Entra ID (Azure AD)"]
-        ARG["Azure Resource Graph API"]
-        LA["Azure Log Analytics Workspace"]
-        OpenAI["Azure OpenAI (gpt-4o)"]
+    subgraph AzureCloud ["Microsoft Azure Cloud Platform"]
+        EntraID["Microsoft Entra ID (Azure AD SSO & OAuth 2.0)"]
+        ARG["Azure Resource Graph API (Multi-Subscription Workspace Discovery)"]
+        Sub1["Subscription A (Production Log Analytics)"]
+        Sub2["Subscription B (Staging Log Analytics)"]
+        Sub3["Subscription C (Security / Sentinel Workspace)"]
+        OpenAIService["Azure OpenAI Service (gpt-4o KQL Generation)"]
     end
 
-    %% Interactions
-    UI -->|1. Sign in & Fetch Token| Entra
-    UI -->|2. Discover User Workspaces| ARG
-    UI -->|3. Query API Request| Router
-    Router --> ZodVal
-    ZodVal --> KqlGuard
-    KqlGuard --> RedisModule
-    RedisModule -->|Check Cache / Fetch HIT| RedisPod
-    RedisModule -->|Cache MISS: Forward Execution| AzureSDK
-    AzureSDK -->|4. Authenticated KQL Execution| LA
-    AzureSDK -->|Async Cache Write (TTL: 5m)| RedisPod
-    Router -->|Ask AI Prompts| OpenAI
+    %% Client Interactions
+    AuthUI -->|1. Sign in & Acquire User Bearer Token| EntraID
+    MultiSubCtrl -->|2. Discover Multi-Subscription Workspaces via ARG| ARG
+    UI -->|3. REST API Requests (JSON / Bearer Token)| Middleware
+    Middleware --> RuntimeConfig
+    Middleware --> Router
+    Router --> WSParser
+    Router --> ZodValidator
+    ZodValidator --> KqlSecurity
+    
+    %% Cache & Backend Execution
+    KqlSecurity --> RedisModule
+    RedisModule -->|Check Cache / Fetch HIT| RedisInstance
+    RedisModule -->|Cache MISS: Forward Request| AzureSDK
+    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub1
+    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub2
+    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub3
+    AzureSDK -->|Async Cache Write (TTL: 500s)| RedisInstance
+    Router -->|5. Natural Language Prompt| ChatEngine
+    ChatEngine -->|Chat Completions API| OpenAIService
 ```
 
 ---
 
-## 2. Authentication Architecture & Configuration
+## 2. Multi-Subscription & Multi-Workspace Architecture
 
-The application implements dual-mode authentication supporting both client-side OAuth 2.0 (MSAL) and server-side Azure credentials (SPN / Managed Identity):
+The application is engineered from the ground up for multi-subscription and multi-workspace log telemetry:
 
 ```mermaid
 graph LR
-    subgraph ClientAuth ["Client Auth (SPA)"]
-        MSAL["@azure/msal-react"]
-        TokenStore["Browser Session Storage"]
+    subgraph Discovery ["Workspace Discovery Layer"]
+        ARGQuery["Azure Resource Graph Query (Resources + ResourceContainers)"]
+        EnvConfig["Static Predefined Workspaces (VITE_WORKSPACES)"]
+        ServerAPI["Server Workspaces (/api/workspaces)"]
     end
 
-    subgraph ServerAuth ["Server Auth (API)"]
-        DefaultCred["DefaultAzureCredential"]
-        SPN["Service Principal (AZURE_CLIENT_SECRET)"]
-        MI["Managed Identity (User/System Assigned)"]
+    subgraph Resolution ["Workspace Aggregation & Normalization"]
+        Combiner["combineWorkspaces (workspaceUtils.ts)"]
     end
 
-    subgraph IdentityProvider ["Identity Provider"]
-        EntraID["Microsoft Entra ID"]
+    subgraph UIControls ["2-Level Multi-Subscription GUI"]
+        SubFilter["Subscription Selector (with active workspace count badges)"]
+        WsPicker["Workspace Selector (search, GUID preview, manual override)"]
+        Tabs["Multi-Tab Workspace (independent workspace & subscription per tab)"]
     end
 
-    MSAL -->|Interactive Popup Login| EntraID
-    EntraID -->|Bearer Token| TokenStore
-    DefaultCred -->|Token Acquisition| EntraID
-    SPN -->|Client Credentials Flow| EntraID
-    MI -->|IMDS Identity Endpoint| EntraID
+    ARGQuery --> Combiner
+    EnvConfig --> Combiner
+    ServerAPI --> Combiner
+    Combiner --> SubFilter
+    SubFilter --> WsPicker
+    WsPicker --> Tabs
 ```
 
-### Authentication Modes & Configuration
-- **User Single Sign-On (MSAL SPA)**:
-  - `VITE_AZURE_CLIENT_ID`: Entra ID Application (Client) ID.
-  - `VITE_AZURE_TENANT_ID`: Directory (Tenant) ID.
-  - `VITE_REQUIRE_AZURE_AD_AUTH`: Controls interactive landing page (`true`/`false`).
-  - **Dynamic Workspace Discovery**: Authenticated users query `microsoft.operationalinsights/workspaces` via Azure Resource Graph to populate the workspace dropdown selector.
-- **Server-Side Authorization (SPN / Managed Identity)**:
-  - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`: For Service Principal auth.
-  - `DefaultAzureCredential`: Falls back automatically to Managed Identity in AKS / Container Apps or Azure CLI credentials during local development.
+### Multi-Subscription Operational Features
+1. **Dynamic Resource Graph Resolution**: Client executes a specialized Resource Graph join query:
+   ```kql
+   Resources
+   | where type =~ 'microsoft.operationalinsights/workspaces'
+   | project id, name, customerId = tostring(properties.customerId), subscriptionId, resourceGroup
+   | join kind=leftouter (
+       ResourceContainers
+       | where type =~ 'microsoft.resources/subscriptions'
+       | project subscriptionId, subscriptionName = name
+   ) on subscriptionId
+   | project id, name, customerId, subscriptionId, subscriptionName = coalesce(subscriptionName, subscriptionId), resourceGroup
+   ```
+   This resolves human-readable subscription names across all subscriptions the user has RBAC access to.
+2. **2-Level GUI Selector**:
+   - Level 1: **Subscription Filter** (`GraphicalSubscriptionSelect.tsx`) narrows workspaces by Azure Subscription with dynamic count badges.
+   - Level 2: **Workspace Selector** (`GraphicalWorkspaceSelect.tsx`) displays workspace name, customer ID GUID preview, subscription badge, and manual override toggle.
+3. **Cross-Subscription Tab Isolation**: Each query tab in [App.tsx](file:///d:/Dinesh/LogAnalytics/client/src/App.tsx) isolates its own subscription and workspace context, enabling engineers to compare production, staging, and security logs side-by-side in separate tabs.
 
 ---
 
-## 3. Query Execution & Caching Pipeline (End-to-End)
+## 3. Authentication & Authorization Architecture
 
-How KQL queries, dynamic predicate substitution, safety sanitization, Redis caching, and time-range filtering execute end-to-end:
+The system implements a robust dual-mode authentication hierarchy supporting both client-side interactive Single Sign-On (SSO) and server-side automated identities:
+
+```mermaid
+graph LR
+    subgraph ClientAuthFlow ["Client-Side Authentication (MSAL SPA)"]
+        User["End User"] -->|Interactive Popup Login| MSAL["@azure/msal-react (PKCE Flow)"]
+        MSAL -->|Acquire ID & Access Tokens| EntraID["Microsoft Entra ID"]
+        EntraID -->|ID Token (Security Group Claims)| GroupGuard["Azure AD Group Validator"]
+        EntraID -->|Access Token (Bearer)| TokenStore["Session Token Context"]
+    end
+
+    subgraph ServerAuthFlow ["Server-Side Authentication Chain (@azure/identity)"]
+        ReqHandler["API Request Handler"] --> HasToken{"User Token in Auth Header?"}
+        HasToken -->|Yes| UserCred["Delegated User Credential (RBAC Passthrough)"]
+        HasToken -->|No| ChainedCred["ChainedTokenCredential"]
+        ChainedCred --> SPN["Service Principal (AZURE_CLIENT_SECRET)"]
+        ChainedCred --> ManagedID["Managed Identity (AKS Pod Identity / IMDS)"]
+        ChainedCred --> AzCLI["Azure CLI Credential (Local Dev az login)"]
+    end
+
+    TokenStore -->|Forward Bearer Token in /api/query| ReqHandler
+    UserCred --> LogAnalyticsAPI["Target Workspace in Any Subscription"]
+    SPN --> LogAnalyticsAPI
+    ManagedID --> LogAnalyticsAPI
+    AzCLI --> LogAnalyticsAPI
+```
+
+---
+
+## 4. End-to-End Query Execution & Caching Pipeline
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
     participant UI as React Frontend (SPA)
-    participant API as Express API Server
-    participant KQL as KQL Parsing Engine
-    participant Redis as Redis Cache (redis-logapp-svc)
-    participant Azure as Azure Log Analytics API
+    participant API as Express API Server (/api)
+    participant KQL as KQL Parser & Guard (kql.ts)
+    participant Redis as Redis Cache Subsystem (redis.ts)
+    participant Azure as Azure Log Analytics API (logAnalytics.ts)
 
-    User->>UI: Select Workspace & Click Preset / Enter KQL
-    UI->>UI: Evaluate Dependent Dynamic Filters
+    User->>UI: Selects Subscription, Target Workspace & Log Preset
     UI->>API: POST /api/parse { query }
     API->>KQL: assertSafeKql(query) & parseFilters(query)
-    KQL-->>API: Filter objects [{ id, enabled, rawText }]
-    API-->>UI: JSON { filters }
-    UI-->>User: Render toggleable Filter Chips & Dynamic Selectors
+    KQL-->>API: Filter objects [{ id, field, operator, value, enabled }]
+    API-->>UI: Return parsed filter tree
+    UI-->>User: Render toggleable Filter Conditions & Dynamic Value Chips
 
-    User->>UI: Adjust filters / time range & click "Run"
-    UI->>API: POST /api/query { query, timespan, filters, maxRows, workspaceId }
-    API->>KQL: Construct effective KQL (strip disabled clauses, inject time filter)
-    API->>API: Compute deterministic SHA-256 Cache Key
-
-    rect rgb(230, 245, 230)
-        Note over API,Redis: ⚡ Redis Cache Check
-        API->>Redis: GET loganalytics:query:<hash>
-        alt Cache HIT (Cached within 5m TTL)
+    User->>UI: Adjusts Timespan, Max Rows & clicks "Run Query"
+    UI->>API: POST /api/query { workspaceId, query, timespan, filters, maxRows } (Bearer Token)
+    API->>KQL: assertSafeKql(query)
+    API->>KQL: applyFilterSelections(query, filters) (Strip disabled clauses)
+    API->>Redis: generateQueryCacheKey({ workspaceId, query, timespan, maxRows, userToken })
+    
+    rect rgb(235, 248, 235)
+        Note over API,Redis: ⚡ Redis Query Cache Check
+        API->>Redis: getCachedQueryResult(cacheKey)
+        alt Cache HIT (Cached within TTL)
             Redis-->>API: Cached JSON Payload
-            API-->>UI: JSON { tables, effectiveQuery, cached: true }
-            UI-->>User: Instant Display (< 5ms) with Cached Badge
+            API-->>UI: HTTP 200 { tables, effectiveQuery, cached: true }
+            UI-->>User: Instant Display (< 5ms) with "Cached" Badge
         else Cache MISS or Redis Offline
-            API->>Azure: logsQueryClient.queryWorkspace(workspaceId, effectiveQuery, timespan)
-            Azure-->>API: LogsQueryResult (Raw Tables & Columns)
-            API->>API: Format rows & slice results to maxRows
-            API-)Redis: SETEX loganalytics:query:<hash> 300 <json> (Async background)
-            API-->>UI: JSON { tables, effectiveQuery, cached: false }
-            UI-->>User: Display in Interactive Result Grid
+            API->>KQL: ensureQueryRowLimit(query, maxRows) (Inject | take N & set notruncation)
+            API->>Azure: logsQueryClient.queryWorkspace(workspaceId, queryWithLimit, timespan)
+            Azure-->>API: LogsQueryResult (Raw Tables, Columns, Execution Stats)
+            API->>API: Normalize rows & serialize JSON response
+            API-)Redis: setCachedQueryResult(cacheKey, result, ttl) (Async background cache write)
+            API-->>UI: HTTP 200 { tables, effectiveQuery, cached: false }
+            UI-->>User: Render in Virtualized Result Grid & Summarized Telemetry
         end
     end
 ```
 
 ---
 
-## 4. Frontend & Backend Technical Architecture
+## 5. Deployment Topologies & Architectures
 
-### A. Frontend Single Page Application Architecture (Client)
-- **Framework & Component Model**: Built on React 18 with TypeScript strict mode, bundled via Vite for optimized ESM module splitting.
-- **State Management & Data Flow**:
-  - Unidirectional state flow managing active query predicates, dynamic filters, workspace selections, and execution telemetry.
-  - Multi-tab query state isolating workspace selections, parameters, and query responses per tab.
-  - Asynchronous filter cache state mapping stable SHA-256 filter identifiers to active boolean toggles.
-  - Multi-tenant MSAL authentication context managing OAuth 2.0 bearer token acquisition and automatic silent renewal (`acquireTokenSilent`).
-- **Resource Graph Integration**: Executes KQL queries against Azure Resource Graph (`microsoft.operationalinsights/workspaces`) via standard fetch abstractions to dynamically discover Log Analytics workspaces under user RBAC scope.
-- **Data Grid & Memory Performance**:
-  - In-memory Virtualized Result Table handling tabular data payloads up to 50,000 rows without UI main-thread blocking.
-  - Data-type aware sorting algorithms (`localeCompare` with numeric sensitivity, ISO-8601 timestamp parsing, numeric comparison).
-  - Native HTML5 Drag-and-Drop column reordering maintaining immutable column ordinal index arrays in React state.
-- **CSV Serialization**: Client-side streaming RFC-4180 compliant CSV string generation and browser Blob URL instantiation.
-
-### B. Backend API Service Architecture (Server)
-- **Runtime & Network Protocol**: Node.js runtime executing Express server listening on dual IPv4/IPv6 socket bindings (`0.0.0.0:8080`).
-- **Environment Schema & Configuration**: Immutable environment validation at process startup using `zod` (`server/src/config.ts`), with strict root `.env` path resolution across npm workspace monorepo roots.
-- **Security & Middleware Pipeline**:
-  - `helmet`: Enforces strict HTTP security headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options).
-  - `cors`: Evaluates incoming `Origin` headers against allowed domain lists configured in `CORS_ORIGIN`.
-  - `express-rate-limit`: Memory-backed sliding window rate limiter restricting API request frequencies per IP.
-  - `assertSafeKql`: AST/Regex security guard sanitizing incoming KQL strings against administrative mutations (`.create`, `.drop`, `.alter`, `.ingest`).
-- **Redis In-Memory Caching Subsystem (`server/src/redis.ts`)**:
-  - Connects to in-cluster Redis service (`redis-logapp-svc:6379`) using `ioredis`.
-  - SHA-256 query parameter hashing (`workspaceId | timespan | maxRows | query`).
-  - Configurable TTL (`REDIS_CACHE_TTL_SECONDS=300`) with LRU eviction.
-  - **Fail-safe Graceful Degradation**: If Redis is offline or restarting, requests automatically bypass the cache and query Azure Log Analytics directly without throwing 500 errors.
-- **Azure SDK Execution Engine**:
-  - Uses `@azure/identity` (`DefaultAzureCredential`, `ClientSecretCredential`) and `@azure/monitor-query` (`LogsQueryClient`).
-  - Request forwarding supporting client-provided Azure AD bearer tokens via Authorization header or fallback to server SPN / Managed Identity.
-  - Result serialization converting Azure Log Analytics `LogsQueryResult` tables and columns into normalized JSON response structures.
-
----
-
-## 5. Deployment Structures & Diagrams (Local & Kubernetes / Pod)
-
-### A. Local Development Deployment Structure
-In local development, Vite proxies API calls from port `5010` to Express on port `8080`, with optional local Redis container:
+### A. Local Development Deployment Architecture
+In local development, the Vite development server proxies API requests to Express, with Azure CLI credential chaining and optional local Redis caching:
 
 ```mermaid
 graph LR
-    subgraph DeveloperMachine ["Local Developer Workstation (Windows 11)"]
-        Browser["Browser (http://localhost:5010)"]
-        ViteDev["Vite Dev Server (Port 5010)"]
-        ExpressDev["Express API Server (Port 8080)"]
-        LocalRedis["Optional Local Redis (Port 6379)"]
-        AzCLI["Azure CLI Auth (az login)"]
+    subgraph DevStation ["Local Workstation (Windows 11)"]
+        Browser["Web Browser (http://localhost:5173)"]
+        Vite["Vite Dev Server (:5173)"]
+        Express["Express Server (:8080)"]
+        RedisLocal["Local Redis (:6379)"]
+        AzCLI["Azure CLI (az login)"]
     end
 
-    subgraph AzureCloud ["Azure Cloud"]
-        EntraID["Entra ID (MSAL Login)"]
-        LogAnalytics["Log Analytics Workspace"]
-        AzureOpenAI["Azure OpenAI (gpt-4o)"]
+    subgraph AzureServices ["Azure Cloud Platform"]
+        Entra["Entra ID (MSAL PKCE)"]
+        Workspaces["Multiple Log Analytics Workspaces"]
+        OpenAIInstance["Azure OpenAI (gpt-4o)"]
     end
 
-    Browser -->|Access UI| ViteDev
-    ViteDev -->|Proxy /api requests| ExpressDev
-    Browser -->|MSAL Auth| EntraID
-    ExpressDev -.->|Cache Check & Store| LocalRedis
-    ExpressDev -->|DefaultAzureCredential| AzCLI
-    ExpressDev -->|Execute KQL| LogAnalytics
-    ExpressDev -->|Generate KQL| AzureOpenAI
+    Browser -->|Load SPA UI| Vite
+    Vite -->|Proxy /api Requests| Express
+    Browser -->|MSAL Auth & Tokens| Entra
+    Express -.->|Cache Check & Write| RedisLocal
+    Express -->|Token Acquisition| AzCLI
+    Express -->|Execute KQL Queries| Workspaces
+    Express -->|Generate KQL with AI| OpenAIInstance
 ```
 
-### B. Pod & Kubernetes (AKS) Deployment Structure
-In containerized production (Docker / AKS), the application runs alongside a dedicated **1GB Redis Cache Pod (`redis-logapp`)** communicating over a private Kubernetes `ClusterIP` Service (`redis-logapp-svc`):
+### B. Production Container & Kubernetes (AKS) Deployment Architecture
+In production, the application is packaged into a hardened Docker container, deployed to Azure Kubernetes Service (AKS), fronted by an Istio Ingress Gateway, and backed by a dedicated **1GB Redis Pod (`redis-logapp`)**:
 
 ```mermaid
 graph TD
     subgraph AKSCluster ["Azure Kubernetes Service (AKS) Cluster"]
-        subgraph IngressLayer ["Ingress Layer"]
-            IstioGw["Istio Ingress Gateway (HTTPS:443)"]
+        subgraph IngressGateway ["Ingress Layer"]
+            Istio["Istio Ingress Gateway (HTTPS:443)"]
             VirtualService["VirtualService Routing Rules"]
         end
 
-        subgraph AppDeployment ["Application Deployment (loganalytics-app)"]
+        subgraph AppWorkload ["Application Deployment (loganalytics-app)"]
             AppPod1["App Pod 1: loganalytics-app (Node.js Express :8080)"]
             AppPod2["App Pod 2: loganalytics-app (Node.js Express :8080)"]
-            AppSvc["Service: loganalytics-app-svc (:8080)"]
+            AppService["ClusterIP Service: loganalytics-app-svc (:8080)"]
         end
 
-        subgraph RedisDeployment ["Redis Cache Deployment (redis-logapp)"]
+        subgraph CacheWorkload ["Cache Deployment (redis-logapp)"]
             RedisPodInstance["Redis Pod: redis-logapp (redis:7-alpine / 1024MB maxmemory)"]
-            RedisSvc["ClusterIP Service: redis-logapp-svc (:6379)"]
+            RedisClusterIP["ClusterIP Service: redis-logapp-svc (:6379)"]
         end
 
-        subgraph ClusterConfig ["Cluster Configuration"]
-            K8sSecret["Opaque Secret (aks/secret.yaml)"]
-            ManagedID["User-Assigned Managed Identity"]
+        subgraph SecurityContext ["Security & Identity"]
+            K8sSecret["Kubernetes Secret (aks/secret.yaml)"]
+            ManagedIdentity["User-Assigned Managed Identity"]
         end
     end
 
-    subgraph External ["External Clients & Azure Cloud Services"]
-        Users["End Users (HTTPS)"]
+    subgraph ExternalServices ["External Clients & Azure Platform"]
+        Users["End Users (Web Browsers)"]
         ACR["Azure Container Registry (ACR)"]
-        AzureLA["Log Analytics Workspace"]
-        OpenAIRes["Azure OpenAI Service"]
+        AzureLA["Multi-Subscription Log Analytics Workspaces"]
+        AzureOpenAIRes["Azure OpenAI Service"]
     end
 
-    Users -->|HTTPS Requests| IstioGw
-    IstioGw --> VirtualService
-    VirtualService --> AppSvc
-    AppSvc --> AppPod1
-    AppSvc --> AppPod2
-    
-    AppPod1 <-->|Read / Write Cache (6379)| RedisSvc
-    AppPod2 <-->|Read / Write Cache (6379)| RedisSvc
-    RedisSvc --> RedisPodInstance
+    Users -->|HTTPS| Istio
+    Istio --> VirtualService
+    VirtualService --> AppService
+    AppService --> AppPod1
+    AppService --> AppPod2
 
-    ACR -->|Pull Images| AppDeployment
-    K8sSecret -.->|Inject Env Vars (REDIS_HOST, Azure Keys)| AppDeployment
-    ManagedID -.->|Assign Identity| AppDeployment
+    AppPod1 <-->|Read / Write Query Cache (:6379)| RedisClusterIP
+    AppPod2 <-->|Read / Write Query Cache (:6379)| RedisClusterIP
+    RedisClusterIP --> RedisPodInstance
 
-    AppPod1 -->|Query Logs (Cache Miss)| AzureLA
-    AppPod2 -->|Query Logs (Cache Miss)| AzureLA
-    AppPod1 -->|AI Chat Prompts| OpenAIRes
-    AppPod2 -->|AI Chat Prompts| OpenAIRes
+    ACR -->|Image Pull| AppWorkload
+    K8sSecret -.->|Inject Env Variables (REDIS_HOST, Azure Keys)| AppWorkload
+    ManagedIdentity -.->|Federated Credential| AppWorkload
+
+    AppPod1 -->|KQL Execution (Cache Miss)| AzureLA
+    AppPod2 -->|KQL Execution (Cache Miss)| AzureLA
+    AppPod1 -->|AI Chat Completions| AzureOpenAIRes
+    AppPod2 -->|AI Chat Completions| AzureOpenAIRes
 ```
+
+---
+
+## 6. Security, Resilience & Compliance Summary
+
+| Layer | Implementation | Security / Operational Benefit |
+| :--- | :--- | :--- |
+| **Cross-Subscription RBAC** | Delegated Bearer Token forwarding in `/api/query` | Preserves individual Azure IAM / RBAC restrictions per subscription and workspace. |
+| **Authentication** | MSAL OAuth 2.0 PKCE + Azure AD Security Groups | Eliminates hardcoded passwords; restricts access to authorized group members. |
+| **Query Sanitization** | `assertSafeKql` AST validator & regex guard | Prevents administrative schema mutation and KQL injection attacks. |
+| **Data Protection** | Compound SHA-256 cache keys with User ID namespace | Prevents cross-tenant / cross-user query cache data leakage. |
+| **API Resilience** | Non-blocking Redis fallback & API timeout guard | Ensures continuous application availability even if cache pod restarts. |
+| **Network Security** | Helmet CSP, CORS whitelist, and Express Rate Limiter | Mitigates XSS, CSRF, clickjacking, and denial-of-service attempts. |
+| **Zero Rebuild Deploy**| Dynamic `/runtime-config.js` injection | Enables immutable container promotion from Dev to Staging to Prod. |

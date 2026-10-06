@@ -62,6 +62,8 @@ export function Chatbot({ onClose }: { onClose: () => void }) {
 
       <div className="chatbot-input">
         <input 
+          id="chatbot-query-input"
+          name="chatbotQuery"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => {

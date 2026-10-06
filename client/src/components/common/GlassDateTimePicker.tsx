@@ -162,6 +162,8 @@ export function GlassDateTimePicker({
         <Calendar size={14} color="#92DE8B" />
         <span>{displayString || placeholder}</span>
         <input
+          id="glass-datetime-input"
+          name="datetimeLocal"
           type="datetime-local"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -309,6 +311,8 @@ export function GlassDateTimePicker({
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <label style={{ fontSize: "10px", color: "#94a3b8" }}>Hour</label>
                 <input
+                  id="glass-time-hour"
+                  name="timeHour"
                   type="number"
                   min={0}
                   max={23}
@@ -329,6 +333,8 @@ export function GlassDateTimePicker({
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <label style={{ fontSize: "10px", color: "#94a3b8" }}>Min</label>
                 <input
+                  id="glass-time-min"
+                  name="timeMinute"
                   type="number"
                   min={0}
                   max={59}

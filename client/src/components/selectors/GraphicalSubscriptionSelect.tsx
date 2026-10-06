@@ -104,6 +104,8 @@ export function GraphicalSubscriptionSelect({
           {subscriptions.length > 4 && (
             <div style={{ padding: "2px 4px" }}>
               <input
+                id="subscription-search-input"
+                name="subscriptionSearch"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

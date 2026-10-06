@@ -1,235 +1,196 @@
-# Azure Log Analytics KQL Explorer
+# Azure Log Analytics KQL Explorer — Multi-Subscription & Multi-Workspace Log Viewer
 
-A container-first application designed for querying Azure Log Analytics workspaces, constructing KQL queries, and analyzing log telemetry with interactive GUI controls.
+An enterprise, container-first web application designed for **centralized multi-subscription and multi-workspace log viewing**, querying Azure Log Analytics workspaces across entire Azure tenants, constructing Kusto Query Language (KQL) queries, and analyzing log telemetry with high-density interactive GUI controls, GPU-accelerated glassmorphic themes, and an integrated AI assistant.
 
-![Application View](docs/app-view.png)
-
-## Key Features & Functionality
-
-- **AI-Powered KQL Assistant (`Ask AI`)**:
-  - Click **Ask AI** in the top navigation bar to open the AI Assistant modal.
-  - Describe what logs you want to investigate in plain English (e.g., *"Find all HTTP 500 errors from Application Gateway in the last 24 hours"*).
-  - Integrates with Azure OpenAI (`gpt-4o`) to automatically generate optimized KQL queries with step-by-step technical explanations.
-  - Generates KQL code that automatically populates into the editor for instant 1-click execution.
-
-- **Query Row Limit Selector (`Max Rows`)**:
-  - Select query maximum row limits (`100`, `500`, `1000`, `2500`, `5000`, `10000`, `50000` rows) directly from the query toolbar before running queries.
-  - Default value set to `1000` rows to optimize performance and backend memory usage while preventing browser DOM overload.
-
-- **Alphabetically Sorted Log Presets Library**:
-  - Interactive **⚡ Log Presets** dropdown menu and **Quick Switch** chips, automatically sorted in strict alphabetical order by name:
-    - **AFD Access Log** (`AzureDiagnostics` FrontDoorAccessLog)
-    - **AFD Firewall Log** (`AzureDiagnostics` FrontDoorWebApplicationFirewallLog)
-    - **App Gateway Log** (`AzureDiagnostics` ApplicationGatewayAccessLog)
-    - **App Service HTTP Logs** (`AppServiceHTTPLogs`)
-    - **Automation Job Logs** (`AzureDiagnostics` MICROSOFT.AUTOMATION JobLogs)
-    - **Azure Firewall Application Log** (`AzureDiagnostics` AZFWApplicationRule)
-    - **Azure Firewall Network Log** (`AzureDiagnostics` NetworkRule)
-    - **Email Delivery Status** (`ACSEmailStatusUpdateOperational`)
-    - **Key Vault Audit Log** (`AzureDiagnostics` MICROSOFT.KEYVAULT AuditEvent)
-    - **Kube Events** (`KubeEvents`)
-    - **Log Usage by DataType** (`Usage` billable volume summary by DataType per day)
-    - **Network Security Group Logs** (`AzureDiagnostics` NetworkSecurity with `ResourceGroup` & `Resource` dynamic filters)
-    - **SMS Incoming Operations** (`ACSSMSIncomingOperations` with `OperationName` & `PhoneNumber` dynamic filters)
-    - **Storage Blob Log** (`StorageBlobLogs`)
-    - **Storage Fileshare Log** (`StorageFileLogs`)
-    - **WVD Connections** (`WVDConnections` Azure Virtual Desktop telemetry)
-
-- **Interactive Dynamic Filters & KQL Preview**:
-  - Dynamic filter dropdowns populated via live distinct value queries from Azure Log Analytics.
-  - Smart query stripping engine (`fetchDynamicFilters`) that strips post-aggregation operations (`summarize`, `order by`, `project`, `render`) when fetching distinct filter values to ensure 100% dropdown population.
-  - GUI condition controls with real-time `⚡ KQL Preview` bar.
-  - Multiple condition operators supported: `==`, `!=`, `contains`, `!contains`, and `between` (e.g., `between (400 .. 599)`).
-
-- **Isolated Table Body Scrollbar & Column Tools**:
-  - Vertical scrollbar is strictly contained within the table body scroll area (`.table-body-wrap`) below column headers, preventing scrollbar overlap on Column Names.
-  - Direct click-hold drag header reordering to customize column sequence.
-  - Synchronized horizontal scrollbar across header and body tables.
-  - Multi-operator primary result filtering (`==`, `!=`, `contains`, `!contains`) with visual active filter pills.
-  - Page size customization (`50`, `100`, `200`, `500`, `1000` rows per page), dynamic pagination, type-aware sorting (numeric, ISO timestamp, string), CSV export, and Local/UTC timezone toggles.
-
-- **Summarized Result Output & KQL Group By Breakdown**:
-  - Analytical summary table displaying distinct value frequency counts (`Count`) and percentage share (`% Share`) with progress indicators.
-  - **KQL Multi-Column Grouping (`| summarize count() by ...`)**: Select multiple columns (e.g., `requestUri_s` and `clientIP_s`) to execute AND tuple grouping, displaying exact combination counts for each URI per Client IP.
-  - **Cascading Filter Dropdown**: 2-level menu allowing multi-column checking and specific sub-value selection per column.
-  - **Interactive Column Header Sorting**: Click any header (`Column Name`, `Distinct Output Value`, `Count`, `% Share`, or dynamic column headers) to sort rows in Ascending (`↑`) or Descending (`↓`) order.
-  - **Dynamic View Scope Toggle**: Switch between summarizing over active primary filtered results (`Filtered`) or the total dataset (`All Rows`).
-
-- **Multi-Tab Query Workspace (`Multi Tab`)**:
-  - Open, switch between, and manage multiple query tabs (`Query 1`, `Query 2`, etc.) simultaneously.
-  - Each tab maintains an isolated, independent state including KQL editor query text, active preset, filter conditions, project columns, dynamic filters, workspace ID, timespan, max rows, and query result tables.
-  - Changing workspace ID on a tab resets all query data for that specific tab cleanly, keeping other open tabs untouched.
-
-- **KQL Code Intellisense & Command Suggestions (`Command Suggestions`)**:
-  - Live autocompletion and KQL command suggestions directly within the KQL Code Editor.
-  - Autocompletes KQL keywords (`where`, `project`, `summarize`, `extend`, `order by`, `count()`, `ago()`, `contains`, `between`, `by`, `take`, `limit`, etc.) and column field names as you type.
-  - Press `Tab`, `Enter`, or click a suggestion chip to insert commands instantly into the editor.
-
-- **Real-Time KQL Syntax Error Notifications (`Syntax Error Notifications`)**:
-  - Real-time syntax validation engine (`validateKql`) analyzing KQL queries as you type.
-  - Detects missing/unmatched parentheses, brackets, invalid or misspelled operators, and unclosed quotes.
-  - Displays header warning badges (e.g. `⚠️ 1 Syntax Error` / `⚠️ N Syntax Errors`) and red glowing alert borders (`rgba(244, 63, 94, 0.5)`) detailing exact line numbers and syntax diagnostic explanations.
-
-- **High-Performance In-Cluster Redis Cache (1GB Pod)**:
-  - Automatically caches KQL query results in an in-cluster 1GB Redis Pod (`redis-svc:6379`) with LRU eviction and configurable TTL.
-  - Returns identical query responses in < 5ms, dramatically cutting Azure Log Analytics API bills and elimination of repeated query latency.
-  - Fail-safe architecture: if Redis is restarting or offline, queries gracefully fall back directly to Azure Log Analytics.
-
-- **Secure Azure AD Auth & Workspace Discovery**:
-  - Secure Azure AD authentication (MSAL SPA) with dynamic Azure Resource Graph workspace discovery and Service Principal (SPN) / Managed Identity support.
+![Application View](docs/Azure-Log.png)
 
 ---
 
-## AI-Powered KQL Generation (`Ask AI`)
+## Centralized Multi-Subscription & Multi-Workspace Log View
 
-The application features an integrated AI Assistant powered by Azure OpenAI to help users construct complex KQL queries effortlessly:
+This application is purpose-built as a **single-pane-of-glass multi-subscription and multi-workspace telemetry viewer**:
 
-1. **Natural Language to KQL Translation**:
-   - Click the **Ask AI** button at the top right of the navigation bar.
-   - Enter natural language questions or prompt requests such as:
-     - *"Find all blocked traffic from Azure Firewall for client IP 10.0.0.45"*
-     - *"Summarize top 10 request URIs with high latency on Application Gateway"*
-     - *"List failed authentication attempts in Key Vault during the last 7 days"*
+* 🌐 **Cross-Subscription & Cross-Tenant Visibility**: Seamlessly inspect and query logs across multiple Azure Subscriptions and Resource Groups from a single unified UI without hopping between different Azure Portal blades.
+* 🏷️ **2-Level Subscription & Workspace Selector**:
+  * **Subscription Filter**: Categorizes workspaces by Azure Subscription with dynamic badge counters (e.g., `Production (8)`, `Staging (4)`, `Security (2)`).
+  * **Workspace Picker**: Searchable dropdown displaying workspace names, subscription tags, customer ID GUID previews, and manual workspace GUID overrides.
+* 📑 **Multi-Tab Multi-Workspace Side-by-Side Analysis**:
+  * Open multiple tabs simultaneously to compare telemetry across different subscriptions and environments (e.g., Tab 1: `Production/EastUS-Logs`, Tab 2: `Staging/WestEurope-Logs`, Tab 3: `Security/Sentinel-Workspace`).
+  * Each tab maintains completely isolated workspace contexts, query texts, dynamic filters, timespans, and result tables.
+* 🔍 **Dynamic Resource Graph Discovery**:
+  * Automatically discovers all Log Analytics workspaces accessible to the user across all subscriptions using Azure Resource Graph (`microsoft.operationalinsights/workspaces` joined with `microsoft.resources/subscriptions`) under user RBAC permissions.
 
-2. **Automated KQL Editor Population**:
-   - The AI Assistant generates valid KQL queries formatted specifically for Azure Log Analytics schemas.
-   - The generated KQL query can be copied or loaded directly into the KQL Code Editor with a single click (`Apply Query`).
+![Application View](docs/Azure-Log1.png)
+---
 
-3. **Backend Azure OpenAI Configuration**:
-   - Enabled by configuring `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_DEPLOYMENT` (e.g., `gpt-4o`) in `.env` or Kubernetes secret manifests.
+## Key Features & Capabilities
+
+### 1. 🌐 Multi-Subscription & Multi-Workspace Selector
+- **Interactive Subscription Selector**: Filter workspaces by subscription with active count badges and instant subscription switching.
+- **Searchable Workspace Selector**: Fast real-time fuzzy search across workspace names, customer IDs (UUIDs), and parent subscriptions.
+- **Manual Workspace Override**: Toggle manual GUID entry to query any Log Analytics workspace directly.
+
+### 2. 🤖 AI-Powered KQL Assistant (`Ask AI`)
+- **Natural Language to KQL**: Click **Ask AI** in the top navigation bar to open the AI Query Assistant modal powered by Azure OpenAI (`gpt-4o`).
+- **Contextual Query Generation**: Describe your investigation in plain English (e.g., *"Find all 5xx HTTP errors on Application Gateway in the last 6 hours grouped by client IP"* or *"List failed Azure Firewall network connections for port 443"*).
+- **Technical Explanations & 1-Click Apply**: Returns optimized KQL queries along with step-by-step breakdown. Click **Apply Query** to instantly load the generated query into the active KQL editor tab.
+
+### 3. 🎨 Glassmorphism UI & 6 Theme Palettes
+- High-contrast, GPU-accelerated glassmorphism design system with smooth backdrop blurs and subtle borders.
+- **6 Distinct Color Palettes**:
+  - 🌲 **Obsidian Sage** *(Default Dark)*: Deep dark obsidian backdrop with soft milk luminescence and moss sage accents.
+  - 🥛 **Milk White** *(Light Mode)*: Frosted ivory milk glass with sage borders and olive accents.
+  - 🌌 **Midnight Azure**: Deep space navy with electric Azure telemetry cyan and blue accents.
+  - 🔮 **Royal Amethyst**: Deep royal purple velvet with neon lavender luminescence.
+  - 🌅 **Sunset Amber**: Warm espresso backdrop with glowing golden amber accents.
+  - ❄️ **Arctic Glacier**: Deep arctic fjord with polar glacier mint teal accents.
+
+### 4. ⚡ Alphabetical Log Presets Library (18 Presets)
+Interactive **⚡ Log Presets** dropdown menu and **Quick Switch** chips, automatically sorted in strict alphabetical order:
+- **ADF Pipeline Logs** (`AzureDiagnostics` with `FACTORIES` resource type & failure status)
+- **AFD Access Log** (`AzureDiagnostics` FrontDoorAccessLog with client IP & routing rules)
+- **AFD Firewall Log** (`AzureDiagnostics` FrontDoorWebApplicationFirewallLog WAF actions)
+- **App Gateway Log** (`AzureDiagnostics` ApplicationGatewayAccessLog with status & latency)
+- **App Service HTTP Logs** (`AppServiceHTTPLogs` IIS access telemetry & status codes)
+- **Automation Job Logs** (`AzureDiagnostics` MICROSOFT.AUTOMATION JobLogs)
+- **Azure Firewall Application Log** (`AzureDiagnostics` AZFWApplicationRule with FQDN & TLS inspection)
+- **Azure Firewall Network Log** (`AzureDiagnostics` NetworkRule with parsed AdditionalFields)
+- **Email Delivery Status** (`ACSEmailStatusUpdateOperational` Azure Communication Services)
+- **Key Vault Audit Log** (`AzureDiagnostics` MICROSOFT.KEYVAULT AuditEvent & UPN identities)
+- **Kube Events** (`KubeEvents` Kubernetes cluster events & namespaces)
+- **Log Usage by DataType** (`Usage` billable volume summary in GB per DataType per day)
+- **Network Security Group Logs** (`AzureDiagnostics` NetworkSecurity with directional flow)
+- **SMS Incoming Operations** (`ACSSMSIncomingOperations` delivery & phone numbers)
+- **Storage Blob Log** (`StorageBlobLogs` container operations & IP addresses)
+- **Storage Fileshare Log** (`StorageFileLogs` SMB access & minor status codes)
+- **WVD Connections** (`WVDConnections` Azure Virtual Desktop telemetry)
+- **Custom Query** (Blank starter template for direct KQL composition)
+
+### 5. 📑 Multi-Tab Query Workspace
+- Work with multiple isolated query tabs (`Query 1`, `Query 2`, etc.) simultaneously.
+- Each tab maintains its own independent state: KQL editor query text, active preset, dynamic filters, filter conditions, column projections, selected subscription, workspace ID, timespan, max rows, and result dataset.
+- Clean tab switching, adding, closing, and automatic workspace isolation.
+
+### 6. 🔍 Dynamic Filters & Live KQL Preview
+- Dynamic filter dropdowns automatically populated via live distinct value queries from Azure Log Analytics.
+- Smart query stripping engine (`fetchDynamicFilters`) that strips post-aggregation operations (`summarize`, `order by`, `project`, `render`) when fetching distinct filter values to ensure 100% dropdown population.
+- GUI condition controls with real-time `⚡ KQL Preview` bar.
+- Supported operators: `==`, `!=`, `contains`, `!contains`, `<`, `<=`, `>`, `>=`, and `between (min .. max)`.
+
+### 7. ✍️ KQL Code Editor with Autocomplete & Real-Time Linting
+- **Intellisense Autocomplete**: Interactive keyword and column suggestions as you type (`where`, `project`, `summarize`, `extend`, `order by`, `count()`, `ago()`, `contains`, `between`, `take`, etc.).
+- **Real-Time Syntax Error Diagnostics**: Detects unbalanced quotes, unmatched brackets/parentheses, misplaced pipes, trailing operators, and invalid keywords as you type with line-number alerts.
+- **Adjustable Height Controls**: Easily switch editor height between Minimized, Normal, and Expanded views.
+
+### 8. 📊 High-Density Interactive Result Table
+- **Click-Hold Drag-and-Drop Column Reordering**: Grab any column header to rearrange column sequence dynamically.
+- **Column Resizing**: Drag column borders to adjust widths for dense log examination.
+- **Text Wrapping Modes**: Toggle between single-line truncation, cell-level wrapping, column wrapping, and global wrap.
+- **Primary Result Column Filtering**: Multi-operator search pills (`==`, `!=`, `contains`, `!contains`) directly on table headers.
+- **Type-Aware Sorting**: Numeric, ISO-8601 timestamp, and string comparisons.
+- **Local / UTC Timezone Toggle**: Instantly convert ISO timestamps between UTC and local system time.
+- **RFC-4180 CSV Export**: Stream and download full table datasets as standard CSV files.
+- **Dynamic Pagination**: Choose page size (`50`, `100`, `200`, `500`, `1000` rows per page).
+
+### 9. 📈 Summarized Result Output & Multi-Column Tuple Grouping
+- Dedicated **Summarized Telemetry** panel below the main results:
+  - **Single Column Breakdown**: Shows distinct value frequency counts and percentage share progress bars.
+  - **Multi-Column KQL Tuple Grouping (`| summarize count() by ...`)**: Select 2 or more columns (e.g., `requestUri_s` + `clientIP_s`) to compute exact occurrence counts for every combination tuple.
+  - **Sub-Value Filtering**: Filter specific sub-values per column to refine telemetry view.
+  - **View Scope Toggle**: Switch between evaluating active primary table filters (*Filtered*) or the complete dataset (*All Rows*).
+  - **Header Sorting**: Click any summary column header to toggle ascending/descending order.
+
+### 10. ⚡ Per-User In-Cluster Redis Cache (1GB Pod)
+- Connects to an in-cluster Redis Pod (`redis-logapp-svc:6379`) with LRU eviction and configurable TTL (`REDIS_CACHE_TTL_SECONDS=500`).
+- **Compound SHA-256 Keying per User**: Caches query results using SHA-256 compound keys incorporating workspace ID, timespan, max rows, normalized query, and user identity (`oid`/`sub`/`upn`), ensuring complete multi-user isolation.
+- Returns cached responses in < 5ms, dramatically cutting Azure Log Analytics API bills and latency.
+- **Fail-Safe Graceful Fallback**: If Redis is restarting or offline, queries automatically fall back directly to Azure Log Analytics.
+- **User Cache Invalidation**: Dedicated `/api/cache/clear` endpoint to purge cached entries on demand.
+
+### 11. 🔐 Microsoft Entra ID (Azure AD) Single Sign-On & RBAC
+- Single-page application OAuth 2.0 PKCE flow with Microsoft Authentication Library (`@azure/msal-react`).
+- **Security Group Authorization**: Restrict application access to specific Azure AD Security Groups (`VITE_ALLOWED_AZURE_AD_GROUPS`).
+- **Dynamic Azure Resource Graph Discovery**: Automatically discovers all Log Analytics workspaces accessible to the authenticated user across multiple subscriptions.
+- **Backend Credential Delegation**: Passes user delegated tokens to Azure Monitor for end-to-end RBAC enforcement, with fallback to Service Principal (SPN) / Managed Identity / Azure CLI.
 
 ---
 
-## Summarized Result Output & Breakdown
+## Technologies Used
 
-The application includes a dedicated **Summarized Telemetry** panel located below the primary result table:
-
-1. **Multi-Column KQL Grouping**:
-   - Selecting 1 column displays frequency breakdown for that field.
-   - Selecting 2 or more columns performs multi-column tuple grouping (`| summarize count() by col1, col2`), rendering separate columns for each field and computing exact occurrence counts.
-
-2. **Sub-Value Filtering & View Scope**:
-   - Check specific sub-values per column to refine summary telemetry.
-   - Toggle between **Filtered** (evaluates active primary table filters) and **All Rows** (evaluates raw query output).
-
-3. **Column Header Sorting**:
-   - Click any table header to toggle Ascending (`↑`) or Descending (`↓`) sort order.
+| Component | Stack | Details |
+| :--- | :--- | :--- |
+| **Frontend SPA** | React 19, TypeScript 5.7, Vite 6 | Lucide Icons, `@azure/msal-react`, `@azure/msal-browser`, Fontsource Inter & JetBrains Mono |
+| **Backend API** | Node.js 22, Express 4.21, TypeScript | `@azure/monitor-query-logs`, `@azure/identity`, `openai`, `zod`, `helmet`, `cors`, `express-rate-limit` |
+| **Caching Layer** | Redis 7 (Alpine), `ioredis` 5.6 | 1024MB maxmemory with `allkeys-lru` eviction & compound SHA-256 keying |
+| **Monorepo Structure**| npm workspaces | Root orchestrator managing `client/` and `server/` packages |
+| **Container & Cloud** | Docker, AKS, Istio Ingress | Zero-rebuild dynamic runtime configuration via `/runtime-config.js` |
 
 ---
 
-## Application Architecture & Technical Design
+## Configuration & Multi-Subscription Setup
 
-### Technologies Used
-- **Frontend**: React 19, TypeScript, Vite, Lucide Icons, `@azure/msal-react`, `@azure/msal-browser`.
-- **Backend**: Node.js 22, Express, TypeScript, Zod, `@azure/monitor-query-logs`, `@azure/identity`, OpenAI SDK (`azure-openai`), Helmet, Express-Rate-Limit.
-- **Packaging & Monorepo**: Managed via npm workspaces (`client/` and `server/`).
-
-### Frontend & Backend Communication
-- Communication between the client and server occurs via a secure REST API over HTTP/HTTPS using JSON payloads.
-- **Development Mode**: Vite dev server (`http://localhost:5173`) proxies `/api/*` requests to the Express backend (`http://localhost:8080`).
-- **Production Mode**: The Express server directly serves both `/api/*` endpoints and the compiled single-page static React build (`client/dist`).
-
-### Azure AD Authentication & Azure SDK Integration
-- **User Authentication**: Frontend integrates `@azure/msal-react` for Single Sign-On (SSO) using Microsoft Entra ID (Azure AD). Users sign in using OAuth 2.0 Authorization Code Flow with PKCE.
-- **Dynamic Workspace Discovery**: Client uses the user's OAuth access token to query Azure Resource Graph (`microsoft.operationalinsights/workspaces`) and fetch all Log Analytics Workspaces the user has permissions to view.
-- **Log Analytics Execution**: Backend queries Log Analytics using `@azure/monitor-query-logs` authenticated via `@azure/identity` using `DefaultAzureCredential`, Service Principal (`AZURE_CLIENT_SECRET`), or container Managed Identity.
-
----
-
-## Azure Access & Configuration
-
-Grant the application identity access to the Log Analytics workspace (e.g., `Log Analytics Reader` role).
-
-Configurable via environment variables or Kubernetes secrets:
-- Service Principal (SPN): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
-- Azure OpenAI Integration: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
-
-### Configuring Multiple Azure Subscriptions & Workspaces (`VITE_WORKSPACES`)
-
-You can define any number of Log Analytics workspaces across multiple Azure Subscriptions in `.env` (or Kubernetes manifests). The application parses them and presents a two-level selection GUI (Subscription filter + Workspace selector with subscription badges).
-
-**Syntax**:
-```env
-VITE_WORKSPACES=SubscriptionName/WorkspaceName:WorkspaceCustomerId,SubscriptionName/WorkspaceName:WorkspaceCustomerId
-```
-
-**How to add subscriptions and workspaces**:
-1. **Add a single workspace to a subscription**:
-   ```env
-   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111
-   ```
-2. **Add multiple workspaces under the SAME subscription**:
-   ```env
-   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111,Production/WestEurope-Logs:22222222-2222-2222-2222-222222222222
-   ```
-3. **Add a NEW subscription with its workspace**:
-   ```env
-   VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111,Staging/Stage-Logs:33333333-3333-3333-3333-333333333333,Security/Sentinel-Logs:44444444-4444-4444-4444-444444444444
-   ```
-
-> **Where to find Workspace Customer ID**:
-> In Azure Portal, open your Log Analytics Workspace > **Overview** blade > copy the **Workspace ID** (GUID format, e.g., `11111111-1111-1111-1111-111111111111`).
-
----
-
-## Azure AD Authentication & Security Group Setup Guide
-
-The application supports Single Sign-On (SSO) using Microsoft Entra ID (Azure AD) via MSAL (`@azure/msal-react`). Follow these steps to configure authentication and restrict access to authorized Azure AD Security Groups.
-
-### Step 1: Register Application in Azure Portal
-1. Navigate to **Azure Portal** > **Microsoft Entra ID** > **App Registrations** > **New Registration**.
-2. Enter Name: `Azure Log Analytics KQL Explorer`.
-3. Supported account types: **Accounts in this organizational directory only (Single tenant)**.
-4. Platform Configuration:
-   - Platform type: **Single-page application (SPA)**.
-   - Redirect URIs: `http://localhost:5173`, `http://localhost:8080`, or your production deployment URL.
-5. Click **Register** and copy your **Application (client) ID** and **Directory (tenant) ID**.
-
----
-
-### Step 2: Configure Environment Variables
-Set the following variables in your root `.env` file or Kubernetes `aks/secret.yaml`:
+Create a `.env` file in the project root (see [`.env.example`](file:///d:/Dinesh/LogAnalytics/.env.example) for a complete template):
 
 ```env
-# Enable Azure AD Login screen (set to "false" to bypass login screen during local testing)
+# Server Configuration
+PORT=8080
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173,http://localhost:5010,http://localhost:8080
+QUERY_TIMEOUT_MS=120000
+QUERY_MAX_ROWS=50000
+QUERY_MAX_LENGTH=20000
+RATE_LIMIT_MAX=300
+
+# Redis Cache Configuration
+REDIS_ENABLED=true
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_CACHE_TTL_SECONDS=500
+
+# Backend Azure Credentials (Service Principal / Managed Identity fallback)
+AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
+AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+AZURE_CLIENT_SECRET=your-spn-client-secret-value
+LOG_ANALYTICS_WORKSPACE_ID=00000000-0000-0000-0000-000000000000
+ALLOW_WORKSPACE_OVERRIDE=true
+
+# Azure OpenAI (Ask AI Assistant)
+AZURE_OPENAI_ENDPOINT=https://your-openai-instance.openai.azure.com/
+AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
+
+# Frontend Azure AD MSAL Authentication (SPA)
 VITE_REQUIRE_AZURE_AD_AUTH=true
+VITE_AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+VITE_AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
+VITE_ALLOWED_AZURE_AD_GROUPS=SecOps-Admins,00000000-0000-0000-0000-000000000000
 
-# Azure AD App Registration (SPA) Details
-VITE_AZURE_CLIENT_ID="00000000-0000-0000-0000-000000000000"
-VITE_AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000"
-
-# Restrict login access to specific Azure AD Security Groups (comma-separated Group Object IDs or Names)
-VITE_ALLOWED_AZURE_AD_GROUPS="SecOps-Admins,99887766-5544-3322-1100-a1b2c3d4e5f6"
+# Static Predefined Workspaces Across Multiple Subscriptions
+# Format: SubscriptionName/WorkspaceName:WorkspaceCustomerId
+VITE_WORKSPACES=Production/EastUS-Logs:11111111-1111-1111-1111-111111111111,Production/WestEurope-Logs:22222222-2222-2222-2222-222222222222,Staging/Stage-Logs:33333333-3333-3333-3333-333333333333,Security/Sentinel-Logs:44444444-4444-4444-4444-444444444444
 ```
-
-> **Note**: If `VITE_ALLOWED_AZURE_AD_GROUPS` is left empty (`""`), all authenticated users within your Azure AD tenant will be granted access to the query workspace.
-
----
-
-### Step 3: Enable Security Group Claims in Azure AD Manifest
-To enforce group-based authorization (`VITE_ALLOWED_AZURE_AD_GROUPS`), your Azure AD App Registration must emit user group claims in the MSAL ID Token:
-
-1. **Option A (Token Configuration GUI)**:
-   - In your Azure AD App Registration, go to **Token configuration** > **Add groups claim**.
-   - Select **Security groups** (or **All groups**) under **ID**, then click **Add**.
-2. **Option B (App Manifest)**:
-   - In your Azure AD App Registration, select **Manifest**.
-   - Locate `"groupMembershipClaims"` and set its value to `"SecurityGroup"`:
-     ```json
-     "groupMembershipClaims": "SecurityGroup"
-     ```
-3. Save the manifest. When users authenticate, MSAL receives their group memberships in ID token claims. If a user is not a member of any group listed in `VITE_ALLOWED_AZURE_AD_GROUPS`, the application presents an **Access Denied** authorization screen detailing authorized groups and troubleshooting steps.
 
 ---
 
 ## Local Development & Execution
 
+### 1. Install Dependencies
 ```powershell
 npm run install:all
+```
+
+### 2. Start Development Servers
+Runs the Vite client (`http://localhost:5173`), Express API server (`http://localhost:8080`), and background health check concurrently:
+```powershell
 npm run dev
 ```
 
-To run a production build locally:
+### 3. Run Unit Tests
+```powershell
+npm test
+```
+
+### 4. Build and Run Production Locally
 ```powershell
 npm run production
 ```
@@ -238,8 +199,8 @@ npm run production
 
 ## Container & AKS Production Deployment
 
-### 1. Configure Cluster Credentials
-Copy `aks/deploy-config.example.json` to `aks/deploy-config.json` and configure your Azure Subscription, Resource Group, Cluster Name, and ACR Registry:
+### 1. Configure Cluster Deployment Parameters
+Copy `aks/deploy-config.example.json` to `aks/deploy-config.json` and configure your Azure details:
 ```json
 {
   "SubscriptionId": "00000000-0000-0000-0000-000000000000",
@@ -251,9 +212,23 @@ Copy `aks/deploy-config.example.json` to `aks/deploy-config.json` and configure 
 }
 ```
 
-### 2. Master All-in-One Production Deployment Script
-Run the master deployment script from the project root:
+### 2. Master All-in-One Deployment Script
+Execute the deployment script from the project root:
 ```powershell
 .\scripts\deploy-prod.ps1
 ```
-The script builds the Docker image, pushes it to ACR, prompts for user confirmation (`Y/N`), connects to AKS, and applies Kubernetes manifests (`aks/secret.yaml`, `aks/deployment.yaml`, `aks/istio-ingress.yaml`).
+The script performs the following:
+1. Builds the production multi-stage Docker container.
+2. Authenticates and pushes the image to Azure Container Registry (ACR).
+3. Connects to Azure Kubernetes Service (AKS).
+4. Deploys Kubernetes Secrets ([aks/secret.yaml](file:///d:/Dinesh/LogAnalytics/aks/secret.yaml)).
+5. Deploys the Redis Cache pod and Service ([aks/redis-deployment.yaml](file:///d:/Dinesh/LogAnalytics/aks/redis-deployment.yaml)).
+6. Deploys the application workload ([aks/deployment.yaml](file:///d:/Dinesh/LogAnalytics/aks/deployment.yaml)) and Istio Ingress routing ([aks/istio-ingress.yaml](file:///d:/Dinesh/LogAnalytics/aks/istio-ingress.yaml)).
+
+---
+
+## Architecture & Code Documentation Links
+- [System Architecture & Design Guide (`Architecture.md`)](file:///d:/Dinesh/LogAnalytics/Architecture.md)
+- [Client Frontend Architecture & Component Guide (`client.md`)](file:///d:/Dinesh/LogAnalytics/client.md)
+- [Server Backend Architecture & API Guide (`server.md`)](file:///d:/Dinesh/LogAnalytics/server.md)
+- [Deployment & Operations Guide (`deployment.md`)](file:///d:/Dinesh/LogAnalytics/deployment.md)

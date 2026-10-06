@@ -1,154 +1,204 @@
-# Client Architecture & Code File Relationship Guide
+# Client Frontend Architecture & File Relationship Guide
 
-## 1. Overview
-The frontend is a high-density, enterprise-grade Azure Log Analytics query workspace built with **React 18**, **TypeScript**, **Vite**, **MSAL (Microsoft Authentication Library)**, and a **GPU-accelerated Glassmorphism Design System** with 6 theme palettes.
+## 1. Overview & Architectural Principles
 
----
+The frontend is an enterprise-grade, high-density **Multi-Subscription & Multi-Workspace Azure Log Analytics query workspace** built with **React 19**, **TypeScript 5.7**, **Vite 6**, **Microsoft Authentication Library (MSAL)**, and a **GPU-accelerated Glassmorphism Design System** supporting 6 distinct theme palettes.
 
-## 2. Directory Structure & Module Breakdown
-
-```
-client/src/
-├── main.tsx                                  # Application bootstrapper & MSAL Provider setup
-├── App.tsx                                   # Main workspace orchestrator & tab controller
-├── types.ts                                  # Central TypeScript models, interfaces & type definitions
-├── api.ts                                    # Backend REST API client & Azure Resource Graph caller
-├── authConfig.ts                             # Azure AD / Entra ID MSAL configuration & token request scopes
-├── env.ts                                    # Dynamic runtime-config (.env fallback) resolver
-├── styles.css                                # Glassmorphism theme tokens, animations, and typography
-├── Chatbot.tsx                               # Floating AI Query Assistant interface
-│
-├── constants/                                # Static configurations & metadata
-│   ├── presets.ts                            # Starter query, 18 Log Presets & dynamic filter definitions
-│   ├── themes.ts                             # 6 Theme configs (Dark, Light, Midnight, Amethyst, Amber, Nordic)
-│   └── kql.ts                                # Valid KQL operators and autocomplete dictionary
-│
-├── utils/                                    # Pure business logic & transformation utilities
-│   ├── filterUtils.ts                        # Filter clause formatting, value matching, column relationships
-│   ├── kqlUtils.ts                           # KQL AST mutator, syntax validator, query generator
-│   ├── workspaceUtils.ts                     # Predefined & server workspace resolvers, tab initializers
-│   └── formatUtils.ts                        # Cell value formatter, CSV serializer, ISO date helpers
-│
-└── components/                               # Modular UI component hierarchy
-    ├── common/                               # Generic reusable micro-components
-    │   ├── SegmentedControl.tsx              # Timespan rapid selection pill control
-    │   ├── GlassDateTimePicker.tsx           # Glass calendar & time picker popover
-    │   └── QueryWarningAlert.tsx             # Collapsible execution warning & truncation alert
-    ├── selectors/                            # Header & workspace selectors
-    │   ├── GraphicalSubscriptionSelect.tsx   # Subscription filter dropdown with workspace counters
-    │   ├── GraphicalWorkspaceSelect.tsx      # Multi-workspace search, selection & manual GUID input
-    │   ├── GraphicalPresetSelect.tsx         # Predefined log presets selector with category colors
-    │   └── GraphicalThemeSelect.tsx          # Multi-palette theme switcher with swatch preview
-    ├── editor/                               # Query input & syntax validation
-    │   └── KqlCodeEditor.tsx                 # High-density KQL editor with autocomplete & syntax errors
-    ├── controls/                             # Query query-builder dropdowns
-    │   ├── FilterConditionsDropdown.tsx      # Multi-select predicate conditions with operator controls
-    │   ├── ProjectColumnsDropdown.tsx        # Projection columns multi-select dropdown
-    │   └── DynamicFiltersBar.tsx             # Dynamic filter chips & multiselect dropdown bars
-    └── table/                                # Data display & telemetry
-        └── ResultTable.tsx                   # PrimaryResult grid, Value filter flyout & Summarized Column Telemetry
-```
+The client is designed around the following core architectural pillars:
+1. **Multi-Subscription & Multi-Workspace Telemetry View**: Centralized single-pane-of-glass interface with a 2-level selector (Subscription filter with workspace count badges + searchable Workspace picker with GUID preview and manual override).
+2. **Cross-Subscription Isolated Query Tabs**: Each tab manages an independent query lifecycle (editor text, active preset, dynamic filters, timespan, max rows, subscription selection, workspace ID, and result dataset). Users can open and compare logs from Production, Staging, and Security workspaces across different subscriptions side-by-side.
+3. **Dynamic Resource Graph Discovery with Subscription Join**: Fetches all Log Analytics workspaces accessible under user RBAC joined with Azure ResourceContainers to resolve human-readable subscription names on the fly.
+4. **Sub-5ms Local Telemetry & Virtualization**: Column reordering, type-aware sorting, multi-operator column filtering, and multi-column tuple grouping execute entirely in-memory with zero server round-trips.
+5. **Zero-Rebuild Container Deployment**: Frontend reads configuration dynamically at runtime via `/runtime-config.js` (with build-time `.env` fallbacks via `env.ts`).
 
 ---
 
-## 3. Component Hierarchy & Code Relationships
+## 2. Directory Structure & File Map
+
+```
+client/
+├── index.html                                # HTML5 shell loading Inter & JetBrains Mono fonts
+├── vite.config.ts                            # Vite build config, dev server proxy & port settings
+├── tsconfig.json                             # Strict TypeScript compiler options
+├── package.json                              # Dependencies: React 19, MSAL, Lucide, Vitest
+└── src/
+    ├── main.tsx                              # Application bootstrapper & MSAL Provider setup
+    ├── App.tsx                               # Main workspace orchestrator, tab manager & layout
+    ├── types.ts                              # Central TypeScript interfaces, DTOs & state models
+    ├── api.ts                                # REST client, Azure Resource Graph queries & API callers
+    ├── authConfig.ts                         # MSAL configuration, redirect URIs & Azure scopes
+    ├── env.ts                                # Dynamic runtime-config (/runtime-config.js) resolver
+    ├── styles.css                            # Glassmorphism design tokens, themes & typography
+    ├── Chatbot.tsx                           # Floating AI Query Assistant interface
+    │
+    ├── constants/                            # Static application constants & definitions
+    │   ├── presets.ts                        # 18 Log Presets, starter queries, dynamic filter configs & preset colors
+    │   ├── themes.ts                         # 6 Glassmorphic theme definitions & color swatch metadata
+    │   └── kql.ts                            # KQL keywords, operators & editor autocomplete dictionary
+    │
+    ├── utils/                                # Pure transformation & business logic utilities
+    │   ├── filterUtils.ts                    # KQL clause formatting, value matching & column relationships
+    │   ├── kqlUtils.ts                       # KQL AST mutator, syntax linter & query generator
+    │   ├── workspaceUtils.ts                 # Predefined & discovered workspace parsers & tab initializers
+    │   └── formatUtils.ts                    # Cell value formatting, ISO date helpers & RFC-4180 CSV serializer
+    │
+    ├── components/                           # Modular component hierarchy
+    │   ├── common/                           # Generic reusable controls
+    │   │   ├── SegmentedControl.tsx          # Timespan rapid selection pill bar
+    │   │   ├── GlassDateTimePicker.tsx       # Glassmorphic custom date/time picker popover
+    │   │   └── QueryWarningAlert.tsx         # Collapsible warning & truncation alert banner
+    │   ├── selectors/                        # Multi-Subscription, Workspace, Preset & Theme selectors
+    │   │   ├── GraphicalSubscriptionSelect.tsx # Subscription filter dropdown with workspace count badges
+    │   │   ├── GraphicalWorkspaceSelect.tsx    # Searchable multi-workspace picker with GUID preview
+    │   │   ├── GraphicalPresetSelect.tsx       # Categorized log presets menu with category color dots
+    │   │   └── GraphicalThemeSelect.tsx        # Multi-palette theme switcher with real-time swatch preview
+    │   ├── editor/                           # KQL input, autocomplete & syntax diagnostics
+    │   │   └── KqlCodeEditor.tsx             # High-density KQL editor with autocomplete popover & syntax alerts
+    │   ├── controls/                         # Query-builder dropdowns & dynamic chips
+    │   │   ├── DynamicFiltersBar.tsx         # Dynamic distinct-value filter dropdowns with tag chips
+    │   │   ├── FilterConditionsDropdown.tsx  # Multi-select predicate conditions with operator controls
+    │   │   └── ProjectColumnsDropdown.tsx    # Projection columns multi-select dropdown with select-all
+    │   └── table/                            # Tabular data grid & summary telemetry
+    │       └── ResultTable.tsx               # Drag-and-drop column reordering, resizing, wrapping & telemetry grouping
+    │
+    └── test/                                 # Unit & component test suites
+        ├── setup.ts                          # Vitest & Testing Library DOM setup
+        └── App.test.tsx                      # Component & integration test suite
+```
+
+---
+
+## 3. Component Hierarchy & Architectural Diagram
 
 ```mermaid
 graph TD
-    Main[main.tsx] --> App[App.tsx]
-    App --> AuthWall[Azure AD Authentication Wall]
-    App --> Topbar[Topbar Header]
-    Topbar --> ThemeSel[GraphicalThemeSelect.tsx]
-    Topbar --> Chat[Chatbot.tsx]
+    Main["main.tsx (MSAL Provider)"] --> App["App.tsx (State Orchestrator)"]
     
-    App --> TabsBar[Tab Bar Container]
-    
-    App --> QueryPanel[Query Panel Container]
-    QueryPanel --> TimespanCtrl[SegmentedControl.tsx]
-    QueryPanel --> DatePicker[GlassDateTimePicker.tsx]
-    QueryPanel --> SubSelect[GraphicalSubscriptionSelect.tsx]
-    QueryPanel --> WsSelect[GraphicalWorkspaceSelect.tsx]
-    QueryPanel --> PresetSelect[GraphicalPresetSelect.tsx]
-    QueryPanel --> DynamicBar[DynamicFiltersBar.tsx]
-    QueryPanel --> CondDropdown[FilterConditionsDropdown.tsx]
-    QueryPanel --> ColDropdown[ProjectColumnsDropdown.tsx]
-    QueryPanel --> Editor[KqlCodeEditor.tsx]
-    
-    App --> HealthAlert[Backend Offline Alert]
-    App --> WarnAlert[QueryWarningAlert.tsx]
-    App --> ResultsSection[Results Container]
-    ResultsSection --> ResultTable[ResultTable.tsx]
+    subgraph HeaderSection ["Top Navigation Bar"]
+        App --> Header["Topbar Header"]
+        Header --> HealthBadge["Backend Health Status Badge"]
+        Header --> ThemeSelector["GraphicalThemeSelect.tsx"]
+        Header --> ClearCacheBtn["Clear Cache Button (/api/cache/clear)"]
+        Header --> ChatTrigger["Ask AI Button"]
+        ChatTrigger --> ChatModal["Chatbot.tsx (Floating Assistant)"]
+        Header --> UserProfile["User Profile / Sign Out"]
+    end
+
+    subgraph AuthLayer ["Authentication Gate"]
+        App --> AuthWall["Azure AD Login Screen / Group Access Denied Wall"]
+    end
+
+    subgraph WorkspaceTabs ["Tab Workspace Controller"]
+        App --> TabBar["Query Tab Bar (Cross-Subscription Isolated Tabs)"]
+    end
+
+    subgraph QueryBuilder ["Query Configuration Panel"]
+        App --> QueryPanel["Query Panel Container"]
+        QueryPanel --> TimespanCtrl["SegmentedControl.tsx (1h, 2h, 4h, 6h, 24h, 7d, Custom)"]
+        QueryPanel --> CustomDateModal["GlassDateTimePicker.tsx"]
+        QueryPanel --> SubSelect["GraphicalSubscriptionSelect.tsx (Subscription Filter)"]
+        QueryPanel --> WsSelect["GraphicalWorkspaceSelect.tsx (Workspace Picker & Override)"]
+        QueryPanel --> PresetSelect["GraphicalPresetSelect.tsx"]
+        QueryPanel --> DynamicBar["DynamicFiltersBar.tsx"]
+        QueryPanel --> CondDropdown["FilterConditionsDropdown.tsx"]
+        QueryPanel --> ColDropdown["ProjectColumnsDropdown.tsx"]
+        QueryPanel --> MaxRowsCtrl["Max Rows Selector (100, 500, 1000, 2500, 5000, 10000, 50000)"]
+        QueryPanel --> Editor["KqlCodeEditor.tsx (Autocomplete & Lint Diagnostics)"]
+        QueryPanel --> RunButton["Run Query / Cancel"]
+    end
+
+    subgraph AlertsSection ["Diagnostic Banners"]
+        App --> OfflineBanner["Backend Offline Banner"]
+        App --> WarningBanner["QueryWarningAlert.tsx"]
+    end
+
+    subgraph DataDisplay ["Telemetry & Results Presentation"]
+        App --> ResultContainer["Results Container"]
+        ResultContainer --> ResultTable["ResultTable.tsx"]
+        ResultTable --> ColHeaderActions["Column Reordering (Drag), Resizing & Header Filter Pills"]
+        ResultTable --> TableBody["Virtualized Scrollable Grid"]
+        ResultTable --> Pagination["Pagination Controls & Page Size Selector"]
+        ResultTable --> SummarizedTelemetry["Summarized Telemetry Panel (Multi-Column Grouping)"]
+    end
 ```
 
 ---
 
-## 4. Module Details & File Contracts
+## 4. Module Deep Dives & Implementation Details
 
-### 4.1 State & Types (`src/types.ts`)
-Consolidates all core data contracts across the application:
-- `TabState`: Represents an isolated query workspace tab (query, timespan, maxRows, workspaceId, selectedSubscription, result, activePreset, presetOptions, presetProjectColumns, dynamicFilterValues, selectedDynamicFilters, optionOperators, optionValues, customStart, customEnd).
-- `PresetQuery`: Model for built-in log queries (id, name, baseQuery, options, projectColumns, dynamicFilters).
-- `DynamicFilterDef`: Template generator for dynamic distinct filters.
-- `QueryResponse` & `QueryTable`: Tabular Azure log query response schemas.
-- `FilterOperator`: Binary comparison operators (`==`, `!=`, `contains`, `!contains`, `<`, `<=`, `>`, `>=`).
-- `KqlSyntaxError`: Real-time editor syntax diagnostics.
+### 4.1 State Models & Data Contracts ([`src/types.ts`](file:///d:/Dinesh/LogAnalytics/client/src/types.ts))
+Defines the single source of truth for all data structures:
+- `TabState`: Represents an isolated query workspace tab:
+  - `id`, `title`: Unique tab identifier and human-readable label.
+  - `query`: Current KQL query text in the editor.
+  - `timespan`, `customStart`, `customEnd`: Active ISO timespan or custom ISO datetime boundaries.
+  - `maxRows`: Active row limit (`100` to `50000`, default `1000`).
+  - `workspaceId`, `selectedSubscription`: Target Log Analytics workspace UUID and parent subscription name.
+  - `result`: Holds the latest `QueryResponse` (or `null`).
+  - `loading`, `error`: Tab execution status flags.
+  - `activePreset`: Currently selected `PresetQuery` template.
+  - `presetOptions`, `presetProjectColumns`: Active boolean selection sets for filter clauses and projected fields.
+  - `dynamicFilterValues`, `selectedDynamicFilters`: Distinct values fetched from Azure and active user selections.
+  - `optionOperators`, `optionValues`: Custom user overrides for predicate operators (`==`, `contains`, `between`) and values.
+- `AzureWorkspace` ([`src/api.ts`](file:///d:/Dinesh/LogAnalytics/client/src/api.ts)): Structure representing a resolved workspace:
+  - `id`: Azure resource ID.
+  - `name`: Workspace display name.
+  - `customerId`: UUID GUID passed to the Log Analytics query engine.
+  - `subscriptionId`: Parent subscription UUID.
+  - `subscriptionName`: Human-readable subscription name.
+  - `resourceGroup`: Azure Resource Group name.
+- `PresetQuery`: Model for predefined log queries containing `id`, `name`, `description`, `baseQuery`, `options`, `projectColumns`, and `dynamicFilters`.
+- `DynamicFilterDef`: Template generator generating dynamic distinct value query clauses.
+- `QueryResponse` & `QueryTable`: Tabular Azure log query response schemas (`tables`, `columns`, `rows`, `effectiveQuery`, `statistics`).
+- `KqlSyntaxError`: Real-time editor syntax diagnostics (`line`, `message`, `suggestion`, `token`).
 
-### 4.2 Utility Modules (`src/utils/`)
-- **`filterUtils.ts`**: Pure functions for formatting KQL clauses (`formatFilterClause`, `buildOptionClause`), matching values (`matchesValueOperator`, `evaluateFilterCondition`), and computing related columns (`getRelatedColumns`).
-- **`kqlUtils.ts`**: High-performance KQL parser and query AST builder:
-  - `validateKql`: Client-side linter checking unbalanced quotes, parentheses, empty pipes, trailing operators, invalid assignment operators, and `between` / `in` syntax.
-  - `updateQueryConditionOption`, `updateQueryDynamicFilter`, `updateQueryProjectColumns`, `updateQueryTimespan`: Mutates KQL text in real-time preserving user formatting.
-  - `generateQuery`: Constructs initial KQL string from preset metadata and user selections.
-- **`workspaceUtils.ts`**:
-  - `getPredefinedWorkspaces`: Reads `.env` / runtime configuration strings formatted as `Subscription/Workspace:CustomerId`.
-  - `combineWorkspaces`: Merges Azure Resource Graph discovered workspaces with server & local configurations without duplicates.
-  - `createInitialTab`: Factory function for tab states.
-- **`formatUtils.ts`**:
-  - `formatCell`: ISO datetime detection with UTC / Local Time conversion.
-  - `toCsv` & `csvEscape`: RFC 4180 compliant CSV export generator.
+### 4.2 Utility Layer ([`src/utils/`](file:///d:/Dinesh/LogAnalytics/client/src/utils/))
 
-### 4.3 Component Modules (`src/components/`)
-- **`selectors/`**:
-  - `GraphicalSubscriptionSelect.tsx`: Subscription filter with active workspace count badges.
-  - `GraphicalWorkspaceSelect.tsx`: Searchable workspace picker with GUID preview and manual switch.
-  - `GraphicalPresetSelect.tsx`: Categorized log preset selector with preset dot swatches.
-  - `GraphicalThemeSelect.tsx`: UI Theme picker with real-time swatch palette indicators.
-- **`editor/`**:
-  - `KqlCodeEditor.tsx`: High-density code editor with keyboard navigation, draggable floating autocomplete popover, live syntax diagnostic banners, and height toggles (minimized, normal, expanded).
-- **`controls/`**:
-  - `FilterConditionsDropdown.tsx`: Multi-select predicate conditions with operator selectors and direct value inputs.
-  - `ProjectColumnsDropdown.tsx`: Projection columns multi-select dropdown with select-all/clear-all actions.
-  - `DynamicFiltersBar.tsx`: Dynamic distinct value filter dropdowns with tag chips and search.
-- **`table/`**:
-  - `ResultTable.tsx`: PrimaryResult table with column reordering (drag-and-drop), column resizing, text wrapping (cell, column, row, global), UTC/Local time toggle, and CSV export.
-  - Includes **Summarized Column Telemetry**: Multi-column tuple frequency grouping (`| summarize count() by ...`), percentage share progress bars, and pagination.
+#### A. [`workspaceUtils.ts`](file:///d:/Dinesh/LogAnalytics/client/src/utils/workspaceUtils.ts)
+- `getPredefinedWorkspaces()`: Reads multi-subscription entries configured in `.env` / runtime configuration formatted as `Subscription/Workspace:CustomerId`.
+- `combineWorkspaces(discovered, predefined, server)`: Merges workspaces discovered via Azure Resource Graph with server-provided and predefined workspaces, deduping by customer ID while preserving subscription associations.
+- `createInitialTab(id, title, defaultWorkspaceId)`: Factory creating initialized `TabState` instances.
+
+#### B. [`filterUtils.ts`](file:///d:/Dinesh/LogAnalytics/client/src/utils/filterUtils.ts)
+- `formatFilterClause(field, values)`: Formats single or multi-value selections into valid KQL `where` predicates (`field in ("val1", "val2")` or `field == "val"`).
+- `buildOptionClause(label, clause, operator, customValue)`: Substitutes user-modified operators and custom input values into existing KQL option templates.
+- `matchesValueOperator(cellValue, filterValue, operator)`: Evaluates client-side column filter predicates against table cells (`==`, `!=`, `contains`, `!contains`, `<`, `<=`, `>`, `>=`).
+
+#### C. [`kqlUtils.ts`](file:///d:/Dinesh/LogAnalytics/client/src/utils/kqlUtils.ts)
+- `validateKql(query)`: Client-side KQL linter analyzing syntax errors with line numbers.
+- `updateQueryConditionOption`, `updateQueryDynamicFilter`, `updateQueryProjectColumns`, `updateQueryTimespan`: Mutates active query text in real-time preserving user formatting.
+- `generateQuery(preset)`: Generates full initial KQL query string from preset metadata and default selections.
+
+#### D. [`formatUtils.ts`](file:///d:/Dinesh/LogAnalytics/client/src/utils/formatUtils.ts)
+- `formatCell(value, column, isUtc)`: Converts ISO-8601 timestamps between UTC and Local Time format (`YYYY-MM-DD HH:mm:ss`).
+- `toCsv(columns, rows, isUtc)` & `csvEscape(str)`: Generates RFC-4180 compliant CSV exports.
 
 ---
 
-## 5. End-to-End Data & State Flow
+### 4.3 Selectors & Controls ([`src/components/`](file:///d:/Dinesh/LogAnalytics/client/src/components/))
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant App as App.tsx
-    participant MSAL as Azure AD / MSAL
-    participant KQL as kqlUtils / filterUtils
-    participant API as api.ts (/api/query)
-    participant Table as ResultTable.tsx
+#### A. Selectors ([`components/selectors/`](file:///d:/Dinesh/LogAnalytics/client/src/components/selectors/))
+- **`GraphicalSubscriptionSelect.tsx`**: Renders subscription filter dropdown with live workspace counts (e.g. `Production (8)`, `Staging (3)`).
+- **`GraphicalWorkspaceSelect.tsx`**: Searchable workspace picker displaying subscription badges, workspace name, customer ID GUID preview, and manual GUID entry toggle.
+- **`GraphicalPresetSelect.tsx`**: Categorized dropdown of all 18 log presets with category color dots, descriptions, and quick search.
+- **`GraphicalThemeSelect.tsx`**: Theme selector rendering palette preview swatches for all 6 glassmorphism themes (*Obsidian Sage*, *Milk White*, *Midnight Azure*, *Royal Amethyst*, *Sunset Amber*, *Arctic Glacier*).
 
-    User->>App: Selects Log Preset (e.g. AFD Access Log)
-    App->>KQL: generateQuery(preset)
-    App->>API: fetchDynamicFilters(Resource, hostName_s)
-    API-->>App: Distinct filter values loaded
-    
-    User->>App: Clicks "Run Query"
-    App->>MSAL: acquireTokenSilent(LogAnalytics.default)
-    MSAL-->>App: Access Token
-    App->>API: runQuery(workspaceId, query, timespan, maxRows, token)
-    API-->>App: QueryResponse (tables, effectiveQuery)
-    App->>Table: Renders PrimaryResult & Summarized Telemetry
-    
-    User->>Table: Adjusts Column Filters / Sort / Telemetry Grouping
-    Table-->>User: Immediate client-side re-calculation & rendering
-```
+#### B. Query Editor ([`components/editor/`](file:///d:/Dinesh/LogAnalytics/client/src/components/editor/))
+- **`KqlCodeEditor.tsx`**: High-density monospace editor with autocomplete popover, live syntax diagnostic banners, and 3 height toggle states.
+
+#### C. Results & Summarized Telemetry ([`components/table/`](file:///d:/Dinesh/LogAnalytics/client/src/components/table/))
+- **`ResultTable.tsx`**: Drag-and-drop column reordering, column resizing, wrapping modes, multi-operator column filtering, type-aware sorting, UTC/Local time toggle, CSV export, and Summarized Telemetry multi-column tuple grouping (`| summarize count() by ...`).
+
+---
+
+## 5. API Client & Azure Resource Graph Discovery ([`src/api.ts`](file:///d:/Dinesh/LogAnalytics/client/src/api.ts))
+
+| Function | Target | Description |
+| :--- | :--- | :--- |
+| `fetchUserWorkspaces(token)` | Azure Resource Graph | Discovers all Log Analytics workspaces across all Azure Subscriptions under user RBAC scope. |
+| `fetchServerWorkspaces()` | `/api/workspaces` | Fetches server-configured subscriptions and workspaces from `VITE_WORKSPACES`. |
+| `checkBackendHealth()` | `/api/health` | Verifies server reachability, configured workspace status, and timestamp. |
+| `parseQuery(query)` | `/api/parse` | Parses `where` clauses from KQL string and returns structured filter objects. |
+| `runQuery(args)` | `/api/query` | Executes KQL query against the specified workspace ID with Bearer token. |
+| `clearCacheApi(token)` | `/api/cache/clear` | Purges all cached query keys belonging to the authenticated user. |
+| `sendChatMessage(messages)` | `/api/chat` | Sends user prompt history to Azure OpenAI KQL Assistant. |

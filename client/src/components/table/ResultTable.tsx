@@ -11,7 +11,7 @@ import {
   Search,
   SlidersHorizontal
 } from "lucide-react";
-import type { QueryTable, FilterOperator } from "../../types";
+import type { PresetQuery, QueryTable, FilterOperator } from "../../types";
 import { formatCell, toCsv } from "../../utils/formatUtils";
 import { getRelatedColumns, evaluateFilterCondition, matchesValueOperator } from "../../utils/filterUtils";
 
@@ -19,7 +19,56 @@ export interface ResultTableProps {
   table: QueryTable;
   query?: string;
   presetProjectColumns?: Set<string>;
+  activePreset?: PresetQuery | null;
   workspaceId?: string;
+}
+
+export function getAutoSummaryColumns(
+  columns: { name: string; type: string }[],
+  activePreset?: PresetQuery | null,
+  queryText: string = ""
+): { name: string; type: string }[] {
+  if (!columns || columns.length === 0) return [];
+
+  // Exclude continuous timestamps, IDs, raw message blobs, etc.
+  const isExcluded = (name: string) => {
+    return /^(timegenerated|timestamp|time|datetime|date|_resourceid|resourceid|subscriptionid|tenantid|trackingreference_s|trackingreference|correlationid|operationid|^id$|_id$|message|description|properties|payload|details|durationms|duration_d|timetaken_d)$/i.test(name);
+  };
+
+  const candidates = columns.filter((c) => !isExcluded(c.name));
+  if (candidates.length === 0) {
+    const fallback = columns.filter((c) => !/timegenerated|timestamp/i.test(c.name));
+    return fallback.length > 0 ? fallback : columns;
+  }
+
+  // Priority scoring function
+  const getScore = (colName: string): number => {
+    const lower = colName.toLowerCase();
+    
+    // Top Tier: Action & Status
+    if (/^(action|action_s|status|resultcode|statuscode|httpstatus_d|serverstatus_s|resulttype|level|category|reason|operationname|deliverystatus|state|rulename_s|rule|webcategory|istlsinspected|isexplicitproxyrequest|failures|success|httpmethod_s|csmethod)$/i.test(colName)) {
+      return 100;
+    }
+
+    // Dynamic filters of active preset
+    if (activePreset?.dynamicFilters?.some((df) => df.field.toLowerCase() === lower)) {
+      return 90;
+    }
+
+    // Host & Resource & Domain & Network
+    if (/^(resource|accountname|host_s|hostname_s|originalhost_s|cshost|namespace|protocol|clientcountry_s|destinationport|destinationfqdn|fqdn|rulecollection|rulecollectiongroup|actionreason|routingrulename_s|backendpoolname_s|originname_s)$/i.test(colName)) {
+      return 70;
+    }
+
+    // IP & Entity columns
+    if (/^(calleripaddress|clientip_s|clientip_s|socketip_s|socketip_s|sourceip|destinationip|fromnumber|tonumber|objectkind|datatype|solution|isbillable|connectionquality|gatewayregion)$/i.test(colName)) {
+      return 50;
+    }
+
+    return 20;
+  };
+
+  return [...candidates].sort((a, b) => getScore(b.name) - getScore(a.name));
 }
 
 function getPageNumbers(currentPage: number, totalPages: number): (number | "...")[] {
@@ -40,6 +89,7 @@ export function ResultTable({
   table,
   query = "",
   presetProjectColumns,
+  activePreset,
   workspaceId
 }: ResultTableProps) {
   const [search, setSearch] = useState("");
@@ -481,14 +531,39 @@ export function ResultTable({
     return Array.from(summarySelectedColumns);
   }, [summarySelectedColumns]);
 
+  const summarySourceRows = useMemo(() => {
+    return summaryScope === "filtered" ? rows : table.rows;
+  }, [summaryScope, rows, table.rows]);
+
+  const summaryUniqueColumnValues = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    table.columns.forEach((col, idx) => {
+      const rawSet = new Set<string>();
+      summarySourceRows.forEach((row) => {
+        const val = row[idx];
+        if (val !== null && val !== undefined && val !== "") {
+          rawSet.add(String(val));
+        }
+      });
+      map[col.name] = Array.from(rawSet).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+      );
+    });
+    return map;
+  }, [table.columns, summarySourceRows]);
+
+  const autoSummaryColumns = useMemo(() => {
+    return getAutoSummaryColumns(table.columns, activePreset, query);
+  }, [table.columns, activePreset, query]);
+
   const summarizedData = useMemo(() => {
-    const sourceRows = summaryScope === "filtered" ? rows : table.rows;
+    const sourceRows = summarySourceRows;
     if (sourceRows.length === 0) return [];
 
     if (selectedColsList.length <= 1) {
       const targetCols = selectedColsList.length === 1
         ? table.columns.filter((c) => c.name === selectedColsList[0])
-        : table.columns;
+        : autoSummaryColumns;
 
       const list: { valuesMap: Record<string, string>; count: number; primaryCol?: string; primaryVal?: string }[] = [];
 
@@ -559,7 +634,7 @@ export function ResultTable({
     });
 
     return Array.from(tupleMap.values()).sort((a, b) => b.count - a.count);
-  }, [table.columns, table.rows, rows, summaryScope, selectedColsList, summarySelectedSubValues]);
+  }, [table.columns, summarySourceRows, selectedColsList, summarySelectedSubValues]);
 
   const sortedSummarizedData = useMemo(() => {
     if (!summarySortColumn || !summarySortDirection) return summarizedData;
@@ -631,6 +706,49 @@ export function ResultTable({
     const link = document.createElement("a");
     link.href = url;
     link.download = `${table.name || "query-results"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadSummaryCsv() {
+    const totalRefRows = summarySourceRows.length;
+    const headers = summaryTableHeaders;
+    const csvRows: string[][] = [headers];
+
+    sortedSummarizedData.forEach((item) => {
+      const pct = totalRefRows > 0 ? `${((item.count / totalRefRows) * 100).toFixed(1)}%` : "0.0%";
+      if (selectedColsList.length >= 2) {
+        const rowData = selectedColsList.map((colName) => item.valuesMap[colName] || "");
+        rowData.push(String(item.count));
+        rowData.push(pct);
+        csvRows.push(rowData);
+      } else {
+        csvRows.push([
+          item.primaryCol || "",
+          item.primaryVal || "",
+          String(item.count),
+          pct
+        ]);
+      }
+    });
+
+    const csvContent = csvRows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const escaped = String(cell ?? "").replace(/"/g, '""');
+            return `"${escaped}"`;
+          })
+          .join(",")
+      )
+      .join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const tableName = table.name ? `${table.name}-summarized-telemetry` : "summarized-telemetry";
+    link.download = `${tableName}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -758,6 +876,8 @@ export function ResultTable({
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%", minWidth: 0, boxSizing: "border-box" }}>
                         <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, flexShrink: 0 }}>Operator:</span>
                         <select
+                          id={`col-filter-op-${hoveredColumn}`}
+                          name={`colFilterOp_${hoveredColumn}`}
                           value={columnFilterOperators[hoveredColumn] || "=="}
                           onChange={(e) => {
                             const newOp = e.target.value as FilterOperator;
@@ -795,6 +915,8 @@ export function ResultTable({
                     <div className="flyout-search">
                       <Search size={13} className="search-icon" />
                       <input
+                        id={`flyout-search-${hoveredColumn}`}
+                        name={`flyoutSearch_${hoveredColumn}`}
                         type="text"
                         placeholder={`Filter ${hoveredColumn} values...`}
                         value={flyoutSearch}
@@ -817,7 +939,7 @@ export function ResultTable({
                           const currentOp = columnFilterOperators[hoveredColumn] || "==";
                           return matchesValueOperator(val, currentOp, flyoutSearch);
                         })
-                        .map((val) => {
+                        .map((val, idx) => {
                           const currentSet = selectedValueFilters[hoveredColumn] || new Set();
                           const isChecked = currentSet.has(val);
 
@@ -836,6 +958,8 @@ export function ResultTable({
                               }}
                             >
                               <input
+                                id={`flyout-val-${hoveredColumn}-${idx}`}
+                                name={`flyoutVal_${hoveredColumn}`}
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => {}}
@@ -859,6 +983,8 @@ export function ResultTable({
           <label className="search">
             <Search size={15} />
             <input
+              id="table-search-input"
+              name="tableSearch"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -915,9 +1041,11 @@ export function ResultTable({
           Columns ({visibleColumns.length} / {table.columns.length} visible)
         </summary>
         <div className="column-list">
-          {table.columns.map((column) => (
+          {table.columns.map((column, idx) => (
             <label key={column.name}>
               <input
+                id={`col-visibility-${idx}`}
+                name={`colVisibility_${column.name}`}
                 type="checkbox"
                 checked={visibleColumns.includes(column.name)}
                 onChange={() => toggleColumn(column.name)}
@@ -1153,7 +1281,9 @@ export function ResultTable({
               <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
                 {selectedColsList.length >= 2
                   ? `KQL Group By: | summarize count() by ${selectedColsList.join(", ")}`
-                  : "Frequency count & percentage share per column value."}
+                  : selectedColsList.length === 1
+                  ? `Single Column Telemetry: ${selectedColsList[0]}`
+                  : `Auto-summarized categorical telemetry (${autoSummaryColumns.map(c => c.name).slice(0, 4).join(", ")}${autoSummaryColumns.length > 4 ? "..." : ""})`}
               </p>
             </div>
 
@@ -1193,7 +1323,7 @@ export function ResultTable({
                   Filter Columns & Values{" "}
                   {(isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size) > 0
                     ? `(${isSummaryDropdownOpen ? draftSummaryColumns.size : summarySelectedColumns.size})`
-                    : "(All)"}
+                    : "(Auto)"}
                 </span>
                 {isSummaryDropdownOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
@@ -1229,8 +1359,9 @@ export function ResultTable({
                       </div>
                     </div>
                     <div className="cascading-column-list">
-                      {table.columns.map((col) => {
+                      {table.columns.map((col, colIdx) => {
                         const isColChecked = draftSummaryColumns.has(col.name);
+                        const distinctVals = summaryUniqueColumnValues[col.name] || [];
                         const subCount = draftSummarySubValues[col.name]?.size || 0;
                         const isHovered = summaryHoveredCol === col.name;
 
@@ -1259,12 +1390,16 @@ export function ResultTable({
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
                               <input
+                                id={`cascading-col-${colIdx}`}
+                                name={`cascadingCol_${col.name}`}
                                 type="checkbox"
                                 checked={isColChecked}
                                 onChange={() => {}}
                               />
                               <span className="col-name" title={col.name}>{col.name}</span>
-                              {subCount > 0 && <span className="active-badge">{subCount}</span>}
+                              <span className="active-badge" style={{ opacity: distinctVals.length > 0 ? 1 : 0.4 }}>
+                                {subCount > 0 ? `${subCount}/${distinctVals.length}` : distinctVals.length}
+                              </span>
                             </div>
                             <ChevronRight size={14} className="arrow-icon" />
                           </div>
@@ -1281,7 +1416,7 @@ export function ResultTable({
                           <button
                             type="button"
                             onClick={() => {
-                              const values = uniqueColumnValues[summaryHoveredCol] || [];
+                              const values = summaryUniqueColumnValues[summaryHoveredCol] || [];
                               setDraftSummarySubValues((prev) => ({
                                 ...prev,
                                 [summaryHoveredCol]: new Set(values)
@@ -1313,7 +1448,7 @@ export function ResultTable({
                       </div>
 
                       <div className="flyout-values-list">
-                        {(uniqueColumnValues[summaryHoveredCol] || []).map((val) => {
+                        {(summaryUniqueColumnValues[summaryHoveredCol] || []).map((val, valIdx) => {
                           const currentSet = draftSummarySubValues[summaryHoveredCol] || new Set();
                           const isChecked = currentSet.has(val);
 
@@ -1344,6 +1479,8 @@ export function ResultTable({
                               }}
                             >
                               <input
+                                id={`cascading-val-${summaryHoveredCol}-${valIdx}`}
+                                name={`cascadingVal_${summaryHoveredCol}`}
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => {}}
@@ -1352,8 +1489,8 @@ export function ResultTable({
                             </div>
                           );
                         })}
-                        {(uniqueColumnValues[summaryHoveredCol] || []).length === 0 && (
-                          <div className="empty-flyout">No distinct values</div>
+                        {(summaryUniqueColumnValues[summaryHoveredCol] || []).length === 0 && (
+                          <div className="empty-flyout">No distinct values in filtered results</div>
                         )}
                       </div>
                     </div>
@@ -1363,7 +1500,7 @@ export function ResultTable({
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto" }}>
             <div style={{ display: "inline-flex", background: "var(--glass-surface-elevated)", border: "1px solid var(--glass-border)", borderRadius: "6px", padding: "2px" }}>
               <button
                 type="button"
@@ -1400,61 +1537,42 @@ export function ResultTable({
                 All Rows ({table.rows.length})
               </button>
             </div>
+
+            <button
+              type="button"
+              className="icon-button"
+              onClick={downloadSummaryCsv}
+              disabled={sortedSummarizedData.length === 0}
+              title="Export Summarized Column Telemetry to CSV"
+              style={{
+                width: "auto",
+                padding: "6px 12px",
+                height: "34px",
+                fontSize: "12px",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: sortedSummarizedData.length === 0 ? "not-allowed" : "pointer",
+                opacity: sortedSummarizedData.length === 0 ? 0.5 : 1
+              }}
+            >
+              <Download size={14} color="#6F7B60" />
+              <span>Export CSV</span>
+            </button>
           </div>
         </div>
 
-        {activeValueFiltersCount > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "14px", padding: "8px 12px", background: "rgba(111, 123, 96, 0.12)", border: "1px solid rgba(111, 123, 96, 0.3)", borderRadius: "8px" }}>
-            <span style={{ fontSize: "12px", color: "#6F7B60", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
-              <Filter size={14} /> Active Primary Filters ({activeValueFiltersCount}):
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "14px", padding: "8px 12px", background: activeValueFiltersCount > 0 ? "rgba(111, 123, 96, 0.12)" : "var(--glass-surface)", border: `1px solid ${activeValueFiltersCount > 0 ? "rgba(111, 123, 96, 0.3)" : "var(--glass-border)"}`, borderRadius: "8px" }}>
+          <span style={{ fontSize: "12px", color: activeValueFiltersCount > 0 ? "#6F7B60" : "var(--color-text-muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+            <Filter size={14} />
+            <span>
+              {activeValueFiltersCount > 0
+                ? `${activeValueFiltersCount} ${activeValueFiltersCount === 1 ? "filter" : "filters"} applied from Primary Result`
+                : "0 filter applied"}
             </span>
-            {Object.entries(selectedValueFilters).map(([colName, set]) => {
-              if (!set || set.size === 0) return null;
-              const op = columnFilterOperators[colName] || "==";
-              return Array.from(set).map((val) => (
-                <span
-                  key={`${colName}-${val}`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "var(--glass-surface)",
-                    border: "1px solid var(--glass-border)",
-                    borderRadius: "6px",
-                    padding: "3px 8px",
-                    fontSize: "11px",
-                    color: "var(--color-text-primary)"
-                  }}
-                >
-                  <span style={{ color: "var(--color-text-muted)" }}>{colName}</span>
-                  <span style={{ color: "#6F7B60", fontWeight: 700 }}>{op}</span>
-                  <strong style={{ color: "var(--color-text-primary)" }}>"{val}"</strong>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedValueFilters((prev) => {
-                        const nextSet = new Set(prev[colName] || []);
-                        nextSet.delete(val);
-                        return { ...prev, [colName]: nextSet };
-                      });
-                    }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--color-text-muted)",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      padding: "0 2px",
-                      display: "inline-flex",
-                      alignItems: "center"
-                    }}
-                    title="Remove filter value"
-                  >
-                    ✕
-                  </button>
-                </span>
-              ));
-            })}
+          </span>
+          {activeValueFiltersCount > 0 && (
             <button
               type="button"
               onClick={() => setSelectedValueFilters({})}
@@ -1469,10 +1587,10 @@ export function ResultTable({
                 cursor: "pointer"
               }}
             >
-              Clear All Filters
+              Clear Primary Filters
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="table-container-outer">
           <div className="summary-table-body-wrap">
