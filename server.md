@@ -6,7 +6,7 @@ The **Azure Log Analytics Explorer Server** is an enterprise-grade Node.js/Expre
 
 ```mermaid
 flowchart TD
-    Client["React Client SPA (Port 5173 / Production dist)"] -->|HTTP / REST API| Express["Express Server (:8080)"]
+    Client["React Client SPA (Port 5173 / Production dist)"] -->|"HTTP / REST API"| Express["Express Server (:8080)"]
     
     subgraph ExpressPipeline ["Express Middleware Pipeline"]
         Helmet["Helmet Security & Content Security Policy (CSP)"] --> CORS["CORS Whitelist Validator"]
@@ -16,11 +16,11 @@ flowchart TD
         RuntimeConfig --> APIRouter["/api Router (routes.ts)"]
     end
     
-    APIRouter -->|1. Multi-Subscription Workspace Parsing| WSConfig["Workspace Config Parser (workspaceConfig.ts)"]
-    APIRouter -->|2. KQL Safety & Filter Parsing| KQL["KQL Engine (kql.ts)"]
-    APIRouter -->|3. Per-User SHA-256 Query Cache| Redis[("Redis Cache (:6379)")]
-    APIRouter -->|4. Authenticated Logs Execution Across Workspaces| AzureLogs["Azure Log Analytics API (logAnalytics.ts)"]
-    APIRouter -->|5. AI Query Assistant Queries| AzureOpenAI["Azure OpenAI Service (chat.ts)"]
+    APIRouter -->|"1. Multi-Subscription Workspace Parsing"| WSConfig["Workspace Config Parser (workspaceConfig.ts)"]
+    APIRouter -->|"2. KQL Safety & Filter Parsing"| KQL["KQL Engine (kql.ts)"]
+    APIRouter -->|"3. Per-User SHA-256 Query Cache"| Redis[("Redis Cache (:6379)")]
+    APIRouter -->|"4. Authenticated Logs Execution Across Workspaces"| AzureLogs["Azure Log Analytics API (logAnalytics.ts)"]
+    APIRouter -->|"5. AI Query Assistant Queries"| AzureOpenAI["Azure OpenAI Service (chat.ts)"]
 ```
 
 ---
@@ -146,9 +146,9 @@ sequenceDiagram
     Server->>Redis: generateQueryCacheKey({ workspaceId, query, timespan, maxRows, userToken })
     
     rect rgb(240, 255, 240)
-        Note over Server,Redis: ⚡ Redis Query Cache Check
+        Note over Server,Redis: Redis Query Cache Check
         Server->>Redis: getCachedQueryResult(cacheKey)
-        alt Cache Hit (< 5ms)
+        alt Cache Hit (under 5ms)
             Redis-->>Server: Cached QueryResponse JSON
             Server-->>User: HTTP 200 { tables, effectiveQuery, cached: true }
         else Cache Miss or Redis Offline

@@ -50,9 +50,9 @@ graph TD
     end
 
     %% Client Interactions
-    AuthUI -->|1. Sign in & Acquire User Bearer Token| EntraID
-    MultiSubCtrl -->|2. Discover Multi-Subscription Workspaces via ARG| ARG
-    UI -->|3. REST API Requests (JSON / Bearer Token)| Middleware
+    AuthUI -->|"1. Sign in & Acquire User Bearer Token"| EntraID
+    MultiSubCtrl -->|"2. Discover Multi-Subscription Workspaces via ARG"| ARG
+    UI -->|"3. REST API Requests (JSON / Bearer Token)"| Middleware
     Middleware --> RuntimeConfig
     Middleware --> Router
     Router --> WSParser
@@ -61,14 +61,14 @@ graph TD
     
     %% Cache & Backend Execution
     KqlSecurity --> RedisModule
-    RedisModule -->|Check Cache / Fetch HIT| RedisInstance
-    RedisModule -->|Cache MISS: Forward Request| AzureSDK
-    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub1
-    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub2
-    AzureSDK -->|4. Authenticated KQL Execution (Delegated RBAC)| Sub3
-    AzureSDK -->|Async Cache Write (TTL: 500s)| RedisInstance
-    Router -->|5. Natural Language Prompt| ChatEngine
-    ChatEngine -->|Chat Completions API| OpenAIService
+    RedisModule -->|"Check Cache / Fetch HIT"| RedisInstance
+    RedisModule -->|"Cache MISS: Forward Request"| AzureSDK
+    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub1
+    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub2
+    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub3
+    AzureSDK -->|"Async Cache Write (TTL: 500s)"| RedisInstance
+    Router -->|"5. Natural Language Prompt"| ChatEngine
+    ChatEngine -->|"Chat Completions API"| OpenAIService
 ```
 
 ---
@@ -131,22 +131,22 @@ The system implements a robust dual-mode authentication hierarchy supporting bot
 ```mermaid
 graph LR
     subgraph ClientAuthFlow ["Client-Side Authentication (MSAL SPA)"]
-        User["End User"] -->|Interactive Popup Login| MSAL["@azure/msal-react (PKCE Flow)"]
-        MSAL -->|Acquire ID & Access Tokens| EntraID["Microsoft Entra ID"]
-        EntraID -->|ID Token (Security Group Claims)| GroupGuard["Azure AD Group Validator"]
-        EntraID -->|Access Token (Bearer)| TokenStore["Session Token Context"]
+        User["End User"] -->|"Interactive Popup Login"| MSAL["@azure/msal-react (PKCE Flow)"]
+        MSAL -->|"Acquire ID & Access Tokens"| EntraID["Microsoft Entra ID"]
+        EntraID -->|"ID Token (Security Group Claims)"| GroupGuard["Azure AD Group Validator"]
+        EntraID -->|"Access Token (Bearer)"| TokenStore["Session Token Context"]
     end
 
     subgraph ServerAuthFlow ["Server-Side Authentication Chain (@azure/identity)"]
         ReqHandler["API Request Handler"] --> HasToken{"User Token in Auth Header?"}
-        HasToken -->|Yes| UserCred["Delegated User Credential (RBAC Passthrough)"]
-        HasToken -->|No| ChainedCred["ChainedTokenCredential"]
+        HasToken -->|"Yes"| UserCred["Delegated User Credential (RBAC Passthrough)"]
+        HasToken -->|"No"| ChainedCred["ChainedTokenCredential"]
         ChainedCred --> SPN["Service Principal (AZURE_CLIENT_SECRET)"]
         ChainedCred --> ManagedID["Managed Identity (AKS Pod Identity / IMDS)"]
         ChainedCred --> AzCLI["Azure CLI Credential (Local Dev az login)"]
     end
 
-    TokenStore -->|Forward Bearer Token in /api/query| ReqHandler
+    TokenStore -->|"Forward Bearer Token in /api/query"| ReqHandler
     UserCred --> LogAnalyticsAPI["Target Workspace in Any Subscription"]
     SPN --> LogAnalyticsAPI
     ManagedID --> LogAnalyticsAPI
@@ -181,12 +181,12 @@ sequenceDiagram
     API->>Redis: generateQueryCacheKey({ workspaceId, query, timespan, maxRows, userToken })
     
     rect rgb(235, 248, 235)
-        Note over API,Redis: ⚡ Redis Query Cache Check
+        Note over API,Redis: Redis Query Cache Check
         API->>Redis: getCachedQueryResult(cacheKey)
         alt Cache HIT (Cached within TTL)
             Redis-->>API: Cached JSON Payload
             API-->>UI: HTTP 200 { tables, effectiveQuery, cached: true }
-            UI-->>User: Instant Display (< 5ms) with "Cached" Badge
+            UI-->>User: Instant Display (under 5ms) with Cached Badge
         else Cache MISS or Redis Offline
             API->>KQL: ensureQueryRowLimit(query, maxRows) (Inject | take N & set notruncation)
             API->>Azure: logsQueryClient.queryWorkspace(workspaceId, queryWithLimit, timespan)
@@ -222,13 +222,13 @@ graph LR
         OpenAIInstance["Azure OpenAI (gpt-4o)"]
     end
 
-    Browser -->|Load SPA UI| Vite
-    Vite -->|Proxy /api Requests| Express
-    Browser -->|MSAL Auth & Tokens| Entra
-    Express -.->|Cache Check & Write| RedisLocal
-    Express -->|Token Acquisition| AzCLI
-    Express -->|Execute KQL Queries| Workspaces
-    Express -->|Generate KQL with AI| OpenAIInstance
+    Browser -->|"Load SPA UI"| Vite
+    Vite -->|"Proxy /api Requests"| Express
+    Browser -->|"MSAL Auth & Tokens"| Entra
+    Express -.->|"Cache Check & Write"| RedisLocal
+    Express -->|"Token Acquisition"| AzCLI
+    Express -->|"Execute KQL Queries"| Workspaces
+    Express -->|"Generate KQL with AI"| OpenAIInstance
 ```
 
 ### B. Production Container & Kubernetes (AKS) Deployment Architecture
@@ -266,24 +266,24 @@ graph TD
         AzureOpenAIRes["Azure OpenAI Service"]
     end
 
-    Users -->|HTTPS| Istio
+    Users -->|"HTTPS"| Istio
     Istio --> VirtualService
     VirtualService --> AppService
     AppService --> AppPod1
     AppService --> AppPod2
 
-    AppPod1 <-->|Read / Write Query Cache (:6379)| RedisClusterIP
-    AppPod2 <-->|Read / Write Query Cache (:6379)| RedisClusterIP
+    AppPod1 <-->|"Read / Write Query Cache (:6379)"| RedisClusterIP
+    AppPod2 <-->|"Read / Write Query Cache (:6379)"| RedisClusterIP
     RedisClusterIP --> RedisPodInstance
 
-    ACR -->|Image Pull| AppWorkload
-    K8sSecret -.->|Inject Env Variables (REDIS_HOST, Azure Keys)| AppWorkload
-    ManagedIdentity -.->|Federated Credential| AppWorkload
+    ACR -->|"Image Pull"| AppWorkload
+    K8sSecret -.->|"Inject Env Variables (REDIS_HOST, Azure Keys)"| AppWorkload
+    ManagedIdentity -.->|"Federated Credential"| AppWorkload
 
-    AppPod1 -->|KQL Execution (Cache Miss)| AzureLA
-    AppPod2 -->|KQL Execution (Cache Miss)| AzureLA
-    AppPod1 -->|AI Chat Completions| AzureOpenAIRes
-    AppPod2 -->|AI Chat Completions| AzureOpenAIRes
+    AppPod1 -->|"KQL Execution (Cache Miss)"| AzureLA
+    AppPod2 -->|"KQL Execution (Cache Miss)"| AzureLA
+    AppPod1 -->|"AI Chat Completions"| AzureOpenAIRes
+    AppPod2 -->|"AI Chat Completions"| AzureOpenAIRes
 ```
 
 ---
