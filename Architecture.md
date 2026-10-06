@@ -12,61 +12,61 @@ It is specifically architected as a **centralized multi-subscription, multi-work
 
 ```mermaid
 graph TD
-    subgraph ClientLayer ["Frontend Client Layer (React 19 + TypeScript + Vite)"]
-        UI["Glassmorphism UI Engine (6 Theme Palettes)"]
-        AuthUI["MSAL OAuth 2.0 Auth Component (PKCE + Groups)"]
-        MultiSubCtrl["Multi-Subscription & Workspace Selector"]
-        TabManager["Multi-Tab Workspace State Orchestrator (Cross-Subscription)"]
-        KqlEditor["KQL Code Editor (Autocomplete & Syntax Validator)"]
+    subgraph ClientLayer ["Frontend Client Layer - React 19, TypeScript, Vite"]
+        UI["Glassmorphism UI Engine - 6 Theme Palettes"]
+        AuthUI["MSAL OAuth 2.0 Auth Component - PKCE and Groups"]
+        MultiSubCtrl["Multi-Subscription and Workspace Selector"]
+        TabManager["Multi-Tab Workspace State Orchestrator - Cross-Subscription"]
+        KqlEditor["KQL Code Editor - Autocomplete and Syntax Validator"]
         FilterEngine["Hierarchical Dynamic Filter Engine"]
-        ResultGrid["Interactive Result Table (Click-Hold Drag Reorder)"]
-        TelemetryPanel["Summarized Telemetry (Multi-Column Grouping)"]
-        ChatbotUI["AI Query Assistant (Floating Modal)"]
+        ResultGrid["Interactive Result Table - Drag and Drop Reorder"]
+        TelemetryPanel["Summarized Telemetry - Multi-Column Grouping"]
+        ChatbotUI["AI Query Assistant - Floating Modal"]
     end
 
-    subgraph ServerLayer ["Backend API Gateway (Node.js 22 + Express 4.21)"]
-        Middleware["Security Middleware (Helmet CSP, CORS, Rate Limiter)"]
-        RuntimeConfig["Dynamic Runtime Config Injector (/runtime-config.js)"]
-        Router["Express API Router (/api)"]
+    subgraph ServerLayer ["Backend API Gateway - Node.js 22, Express 4.21"]
+        Middleware["Security Middleware - Helmet CSP, CORS, Rate Limiter"]
+        RuntimeConfig["Dynamic Runtime Config Injector - runtime-config.js"]
+        Router["Express API Router - /api"]
         ZodValidator["Zod Request Schema Validator"]
-        WSParser["Multi-Subscription Workspace Parser (workspaceConfig.ts)"]
-        KqlSecurity["KQL AST Guard & Command Sanitizer (kql.ts)"]
-        RedisModule["Per-User Redis Caching Engine (redis.ts)"]
-        AzureSDK["Azure Monitor Logs Client (logAnalytics.ts)"]
-        ChatEngine["Azure OpenAI Completion Handler (chat.ts)"]
+        WSParser["Multi-Subscription Workspace Parser - workspaceConfig.ts"]
+        KqlSecurity["KQL AST Guard and Command Sanitizer - kql.ts"]
+        RedisModule["Per-User Redis Caching Engine - redis.ts"]
+        AzureSDK["Azure Monitor Logs Client - logAnalytics.ts"]
+        ChatEngine["Azure OpenAI Completion Handler - chat.ts"]
     end
 
-    subgraph CacheLayer ["Caching Layer (Redis 7)"]
-        RedisInstance["Redis Cache (1GB maxmemory / allkeys-lru / Compound SHA-256 Keying)"]
+    subgraph CacheLayer ["Caching Layer - Redis 7"]
+        RedisInstance["Redis Cache - 1GB maxmemory, allkeys-lru, Compound SHA-256 Keying"]
     end
 
     subgraph AzureCloud ["Microsoft Azure Cloud Platform"]
-        EntraID["Microsoft Entra ID (Azure AD SSO & OAuth 2.0)"]
-        ARG["Azure Resource Graph API (Multi-Subscription Workspace Discovery)"]
-        Sub1["Subscription A (Production Log Analytics)"]
-        Sub2["Subscription B (Staging Log Analytics)"]
-        Sub3["Subscription C (Security / Sentinel Workspace)"]
-        OpenAIService["Azure OpenAI Service (gpt-4o KQL Generation)"]
+        EntraID["Microsoft Entra ID - Azure AD SSO and OAuth 2.0"]
+        ARG["Azure Resource Graph API - Multi-Subscription Discovery"]
+        Sub1["Subscription A - Production Log Analytics"]
+        Sub2["Subscription B - Staging Log Analytics"]
+        Sub3["Subscription C - Security / Sentinel Workspace"]
+        OpenAIService["Azure OpenAI Service - gpt-4o KQL Generation"]
     end
 
     %% Client Interactions
-    AuthUI -->|"1. Sign in & Acquire User Bearer Token"| EntraID
+    AuthUI -->|"1. Sign in and Acquire User Bearer Token"| EntraID
     MultiSubCtrl -->|"2. Discover Multi-Subscription Workspaces via ARG"| ARG
-    UI -->|"3. REST API Requests (JSON / Bearer Token)"| Middleware
+    UI -->|"3. REST API Requests - JSON / Bearer Token"| Middleware
     Middleware --> RuntimeConfig
     Middleware --> Router
     Router --> WSParser
     Router --> ZodValidator
     ZodValidator --> KqlSecurity
     
-    %% Cache & Backend Execution
+    %% Cache and Backend Execution
     KqlSecurity --> RedisModule
     RedisModule -->|"Check Cache / Fetch HIT"| RedisInstance
     RedisModule -->|"Cache MISS: Forward Request"| AzureSDK
-    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub1
-    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub2
-    AzureSDK -->|"4. Authenticated KQL Execution (Delegated RBAC)"| Sub3
-    AzureSDK -->|"Async Cache Write (TTL: 500s)"| RedisInstance
+    AzureSDK -->|"4. Authenticated KQL Execution - Delegated RBAC"| Sub1
+    AzureSDK -->|"4. Authenticated KQL Execution - Delegated RBAC"| Sub2
+    AzureSDK -->|"4. Authenticated KQL Execution - Delegated RBAC"| Sub3
+    AzureSDK -->|"Async Cache Write - TTL: 500s"| RedisInstance
     Router -->|"5. Natural Language Prompt"| ChatEngine
     ChatEngine -->|"Chat Completions API"| OpenAIService
 ```
@@ -80,19 +80,19 @@ The application is engineered from the ground up for multi-subscription and mult
 ```mermaid
 graph LR
     subgraph Discovery ["Workspace Discovery Layer"]
-        ARGQuery["Azure Resource Graph Query (Resources + ResourceContainers)"]
-        EnvConfig["Static Predefined Workspaces (VITE_WORKSPACES)"]
-        ServerAPI["Server Workspaces (/api/workspaces)"]
+        ARGQuery["Azure Resource Graph Query - Resources and Containers"]
+        EnvConfig["Static Predefined Workspaces - VITE_WORKSPACES"]
+        ServerAPI["Server Workspaces - /api/workspaces"]
     end
 
-    subgraph Resolution ["Workspace Aggregation & Normalization"]
-        Combiner["combineWorkspaces (workspaceUtils.ts)"]
+    subgraph Resolution ["Workspace Aggregation and Normalization"]
+        Combiner["combineWorkspaces - workspaceUtils.ts"]
     end
 
     subgraph UIControls ["2-Level Multi-Subscription GUI"]
-        SubFilter["Subscription Selector (with active workspace count badges)"]
-        WsPicker["Workspace Selector (search, GUID preview, manual override)"]
-        Tabs["Multi-Tab Workspace (independent workspace & subscription per tab)"]
+        SubFilter["Subscription Selector - with workspace count badges"]
+        WsPicker["Workspace Selector - search, GUID preview, manual override"]
+        Tabs["Multi-Tab Workspace - independent workspace per tab"]
     end
 
     ARGQuery --> Combiner
@@ -130,20 +130,20 @@ The system implements a robust dual-mode authentication hierarchy supporting bot
 
 ```mermaid
 graph LR
-    subgraph ClientAuthFlow ["Client-Side Authentication (MSAL SPA)"]
-        User["End User"] -->|"Interactive Popup Login"| MSAL["@azure/msal-react (PKCE Flow)"]
-        MSAL -->|"Acquire ID & Access Tokens"| EntraID["Microsoft Entra ID"]
-        EntraID -->|"ID Token (Security Group Claims)"| GroupGuard["Azure AD Group Validator"]
-        EntraID -->|"Access Token (Bearer)"| TokenStore["Session Token Context"]
+    subgraph ClientAuthFlow ["Client-Side Authentication - MSAL SPA"]
+        User["End User"] -->|"Interactive Popup Login"| MSAL["@azure/msal-react - PKCE Flow"]
+        MSAL -->|"Acquire ID and Access Tokens"| EntraID["Microsoft Entra ID"]
+        EntraID -->|"ID Token - Security Group Claims"| GroupGuard["Azure AD Group Validator"]
+        EntraID -->|"Access Token - Bearer"| TokenStore["Session Token Context"]
     end
 
-    subgraph ServerAuthFlow ["Server-Side Authentication Chain (@azure/identity)"]
+    subgraph ServerAuthFlow ["Server-Side Authentication Chain - Azure Identity"]
         ReqHandler["API Request Handler"] --> HasToken{"User Token in Auth Header?"}
-        HasToken -->|"Yes"| UserCred["Delegated User Credential (RBAC Passthrough)"]
+        HasToken -->|"Yes"| UserCred["Delegated User Credential - RBAC Passthrough"]
         HasToken -->|"No"| ChainedCred["ChainedTokenCredential"]
-        ChainedCred --> SPN["Service Principal (AZURE_CLIENT_SECRET)"]
-        ChainedCred --> ManagedID["Managed Identity (AKS Pod Identity / IMDS)"]
-        ChainedCred --> AzCLI["Azure CLI Credential (Local Dev az login)"]
+        ChainedCred --> SPN["Service Principal - AZURE_CLIENT_SECRET"]
+        ChainedCred --> ManagedID["Managed Identity - AKS Pod Identity / IMDS"]
+        ChainedCred --> AzCLI["Azure CLI Credential - Local Dev az login"]
     end
 
     TokenStore -->|"Forward Bearer Token in /api/query"| ReqHandler
@@ -208,24 +208,24 @@ In local development, the Vite development server proxies API requests to Expres
 
 ```mermaid
 graph LR
-    subgraph DevStation ["Local Workstation (Windows 11)"]
-        Browser["Web Browser (http://localhost:5173)"]
-        Vite["Vite Dev Server (:5173)"]
-        Express["Express Server (:8080)"]
-        RedisLocal["Local Redis (:6379)"]
-        AzCLI["Azure CLI (az login)"]
+    subgraph DevStation ["Local Workstation - Windows 11"]
+        Browser["Web Browser - http://localhost:5173"]
+        Vite["Vite Dev Server - Port 5173"]
+        Express["Express Server - Port 8080"]
+        RedisLocal["Local Redis - Port 6379"]
+        AzCLI["Azure CLI - az login"]
     end
 
     subgraph AzureServices ["Azure Cloud Platform"]
-        Entra["Entra ID (MSAL PKCE)"]
+        Entra["Entra ID - MSAL PKCE"]
         Workspaces["Multiple Log Analytics Workspaces"]
-        OpenAIInstance["Azure OpenAI (gpt-4o)"]
+        OpenAIInstance["Azure OpenAI - gpt-4o"]
     end
 
     Browser -->|"Load SPA UI"| Vite
     Vite -->|"Proxy /api Requests"| Express
-    Browser -->|"MSAL Auth & Tokens"| Entra
-    Express -.->|"Cache Check & Write"| RedisLocal
+    Browser -->|"MSAL Auth and Tokens"| Entra
+    Express -.->|"Cache Check and Write"| RedisLocal
     Express -->|"Token Acquisition"| AzCLI
     Express -->|"Execute KQL Queries"| Workspaces
     Express -->|"Generate KQL with AI"| OpenAIInstance
@@ -236,32 +236,32 @@ In production, the application is packaged into a hardened Docker container, dep
 
 ```mermaid
 graph TD
-    subgraph AKSCluster ["Azure Kubernetes Service (AKS) Cluster"]
+    subgraph AKSCluster ["Azure Kubernetes Service - AKS Cluster"]
         subgraph IngressGateway ["Ingress Layer"]
-            Istio["Istio Ingress Gateway (HTTPS:443)"]
+            Istio["Istio Ingress Gateway - HTTPS:443"]
             VirtualService["VirtualService Routing Rules"]
         end
 
-        subgraph AppWorkload ["Application Deployment (loganalytics-app)"]
-            AppPod1["App Pod 1: loganalytics-app (Node.js Express :8080)"]
-            AppPod2["App Pod 2: loganalytics-app (Node.js Express :8080)"]
-            AppService["ClusterIP Service: loganalytics-app-svc (:8080)"]
+        subgraph AppWorkload ["Application Deployment - loganalytics-app"]
+            AppPod1["App Pod 1: loganalytics-app - Node.js Express :8080"]
+            AppPod2["App Pod 2: loganalytics-app - Node.js Express :8080"]
+            AppService["ClusterIP Service: loganalytics-app-svc - Port 8080"]
         end
 
-        subgraph CacheWorkload ["Cache Deployment (redis-logapp)"]
-            RedisPodInstance["Redis Pod: redis-logapp (redis:7-alpine / 1024MB maxmemory)"]
-            RedisClusterIP["ClusterIP Service: redis-logapp-svc (:6379)"]
+        subgraph CacheWorkload ["Cache Deployment - redis-logapp"]
+            RedisPodInstance["Redis Pod: redis-logapp - redis:7-alpine / 1024MB maxmemory"]
+            RedisClusterIP["ClusterIP Service: redis-logapp-svc - Port 6379"]
         end
 
-        subgraph SecurityContext ["Security & Identity"]
-            K8sSecret["Kubernetes Secret (aks/secret.yaml)"]
+        subgraph SecurityContext ["Security and Identity"]
+            K8sSecret["Kubernetes Secret - aks/secret.yaml"]
             ManagedIdentity["User-Assigned Managed Identity"]
         end
     end
 
-    subgraph ExternalServices ["External Clients & Azure Platform"]
-        Users["End Users (Web Browsers)"]
-        ACR["Azure Container Registry (ACR)"]
+    subgraph ExternalServices ["External Clients and Azure Platform"]
+        Users["End Users - Web Browsers"]
+        ACR["Azure Container Registry - ACR"]
         AzureLA["Multi-Subscription Log Analytics Workspaces"]
         AzureOpenAIRes["Azure OpenAI Service"]
     end
@@ -272,16 +272,16 @@ graph TD
     AppService --> AppPod1
     AppService --> AppPod2
 
-    AppPod1 <-->|"Read / Write Query Cache (:6379)"| RedisClusterIP
-    AppPod2 <-->|"Read / Write Query Cache (:6379)"| RedisClusterIP
+    AppPod1 <-->|"Read / Write Query Cache - Port 6379"| RedisClusterIP
+    AppPod2 <-->|"Read / Write Query Cache - Port 6379"| RedisClusterIP
     RedisClusterIP --> RedisPodInstance
 
     ACR -->|"Image Pull"| AppWorkload
-    K8sSecret -.->|"Inject Env Variables (REDIS_HOST, Azure Keys)"| AppWorkload
+    K8sSecret -.->|"Inject Env Variables - REDIS_HOST, Azure Keys"| AppWorkload
     ManagedIdentity -.->|"Federated Credential"| AppWorkload
 
-    AppPod1 -->|"KQL Execution (Cache Miss)"| AzureLA
-    AppPod2 -->|"KQL Execution (Cache Miss)"| AzureLA
+    AppPod1 -->|"KQL Execution - Cache Miss"| AzureLA
+    AppPod2 -->|"KQL Execution - Cache Miss"| AzureLA
     AppPod1 -->|"AI Chat Completions"| AzureOpenAIRes
     AppPod2 -->|"AI Chat Completions"| AzureOpenAIRes
 ```
