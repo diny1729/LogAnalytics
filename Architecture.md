@@ -272,8 +272,8 @@ graph TD
     AppService --> AppPod1
     AppService --> AppPod2
 
-    AppPod1 <-->|"Read / Write Query Cache - Port 6379"| RedisClusterIP
-    AppPod2 <-->|"Read / Write Query Cache - Port 6379"| RedisClusterIP
+    AppPod1 ---|"Read / Write Query Cache - Port 6379"| RedisClusterIP
+    AppPod2 ---|"Read / Write Query Cache - Port 6379"| RedisClusterIP
     RedisClusterIP --> RedisPodInstance
 
     ACR -->|"Image Pull"| AppWorkload
